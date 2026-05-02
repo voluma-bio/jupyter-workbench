@@ -28,8 +28,8 @@ class KernelPort(Protocol):
         """Connect to an existing kernel for a session."""
         ...
 
-    def execute(self, code: str) -> ExecutionOutput:
-        """Execute code in the currently connected kernel."""
+    def execute(self, session_id: str, code: str) -> ExecutionOutput:
+        """Execute code in a session kernel."""
         ...
 
     def is_alive(self, session_id: str) -> bool:

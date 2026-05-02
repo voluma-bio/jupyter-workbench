@@ -1,7 +1,7 @@
 """Public package surface for jupyter-workbench."""
 
 from jupyter_workbench.core.execution_service import ExecutionService
-from jupyter_workbench.core.interfaces import KernelPort, NotebookPort
+from jupyter_workbench.core.interfaces import ExecutionOutput, KernelPort, NotebookPort
 from jupyter_workbench.core.lineage_service import LineageService
 from jupyter_workbench.core.models import (
     CompactionResult,
@@ -21,6 +21,7 @@ __all__ = [
     "CompactionResult",
     "DerivationResult",
     "ExecResult",
+    "ExecutionOutput",
     "ExecutionService",
     "KernelPort",
     "LineageInfo",
