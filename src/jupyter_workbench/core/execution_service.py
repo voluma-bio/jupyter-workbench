@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from jupyter_workbench.core.interfaces import ExecutionOutput, KernelPort, NotebookPort
+from jupyter_workbench.core.interfaces import ExecutionOutput, KernelPort, NotebookPort, VisualizationPort
 from jupyter_workbench.core.models import ExecResult, NotebookMutationResult
 from jupyter_workbench.core.session_service import SessionNotFoundError
 
@@ -22,10 +22,12 @@ class ExecutionService:
         kernel: KernelPort,
         notebook: NotebookPort,
         root_dir: Path | None = None,
+        visualization: VisualizationPort | None = None,
     ) -> None:
         self.kernel = kernel
         self.notebook = notebook
         self.root_dir = root_dir or Path(".jupyter-workbench")
+        self.visualizations = visualization
 
     def exec_code(
         self,
@@ -99,6 +101,8 @@ class ExecutionService:
             )
             output_artifacts.append(artifact)
 
+        visualization_delta = self._record_visualization_delta(resolved_session_id, execution)
+
         status = "error" if execution.error else "ok"
         return ExecResult(
             session_id=resolved_session_id,
@@ -107,9 +111,45 @@ class ExecutionService:
             inline_summary=inline_summary,
             output_artifacts=output_artifacts,
             error_traceback=error_traceback,
-            visualization_delta=None,
+            visualization_delta=visualization_delta,
             output_size_warning=self._byte_len(full_output) > OUTPUT_WARNING_BYTES,
         )
+
+
+    def _record_visualization_delta(
+        self,
+        session_id: str,
+        execution: ExecutionOutput,
+    ) -> dict[str, Any] | None:
+        if self.visualizations is None:
+            return None
+        scene_info = self.visualizations.detect_scene_from_display_data(execution.display_data)
+        screenshots = self.visualizations.screenshot_paths(session_id)
+        if scene_info is None and not screenshots:
+            return None
+
+        delta: dict[str, Any] = {}
+        if scene_info is not None:
+            viz_id = str(scene_info.get("viz_id") or "active")
+            scene = self.visualizations.register_scene(session_id, viz_id, scene_info)
+            self._update_manifest_visualization_status(session_id, str(scene.get("status", "healthy")))
+            delta["scene"] = scene
+        if screenshots:
+            delta["screenshots"] = screenshots
+        return delta
+
+    def _update_manifest_visualization_status(self, session_id: str, scene_status: str) -> None:
+        manifest = self._read_manifest(session_id)
+        if scene_status == "healthy":
+            manifest["visualization_status"] = "visualization_healthy"
+        elif scene_status == "degraded":
+            manifest["visualization_status"] = "visualization_degraded"
+        else:
+            manifest["visualization_status"] = f"visualization_{scene_status}"
+        manifest_path = self.root_dir / "sessions" / session_id / "manifest.json"
+        tmp_path = manifest_path.with_suffix(".json.tmp")
+        tmp_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+        tmp_path.replace(manifest_path)
 
     def _notebook_outputs(self, execution: ExecutionOutput) -> list[dict[str, Any]]:
         outputs: list[dict[str, Any]] = []

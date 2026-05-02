@@ -45,6 +45,35 @@ class KernelPort(Protocol):
         ...
 
 
+class VisualizationPort(Protocol):
+    """Port for durable visualization metadata and artifacts."""
+
+    def register_scene(
+        self,
+        session_id: str,
+        viz_id: str | None,
+        plotter_info: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Persist scene metadata and return the registered manifest."""
+        ...
+
+    def get_active_scene(self, session_id: str) -> dict[str, Any] | None:
+        """Return the active scene for a session, if any."""
+        ...
+
+    def list_scenes(self, session_id: str) -> list[dict[str, Any]]:
+        """Return persisted scene manifests for a session."""
+        ...
+
+    def detect_scene_from_display_data(self, display_data: list[dict[str, Any]]) -> dict[str, Any] | None:
+        """Extract scene metadata from execution display payloads."""
+        ...
+
+    def screenshot_paths(self, session_id: str) -> list[str]:
+        """Return screenshot artifact paths for a session."""
+        ...
+
+
 class NotebookPort(Protocol):
     """Port for durable notebook storage."""
 

@@ -5,6 +5,78 @@ description: Build PyVista + trame interactive scenes inside a jupyter-workbench
 
 # PyVista Interactive
 
-Placeholder guidance for creating PyVista scenes through `jupyter-workbench exec`, showing them with `plotter.show(jupyter_backend='trame')`, recording interaction events, and capturing screenshots.
+Use this skill when an agent needs a user-visible PyVista scene from a durable `jupyter-workbench` session. Visualization runs inside the persistent Jupyter kernel. There is no separate visualization CLI.
 
-Visualization lives inside the Jupyter kernel session; there is no second visualization CLI.
+## Start a live scene
+
+1. Open or attach to a session.
+
+```bash
+jupyter-workbench open --session-id review-1
+```
+
+2. Execute scene setup code in the kernel and show it with trame. Keep the `plotter` variable in kernel memory for later updates and screenshots.
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+import pyvista as pv
+plotter = pv.Plotter()
+plotter.add_mesh(pv.Sphere(), color='tomato')
+plotter.add_axes()
+plotter.show(jupyter_backend='trame')
+"
+```
+
+The execution result should surface `visualization_delta` when trame display output includes a browser URL. If the URL is present, ask the user to open it; do not replace the review with text-only descriptions.
+
+## Inspect durable visualization state
+
+```bash
+jupyter-workbench snapshot --session-id review-1
+```
+
+Read `visualization_summary.active_scene.browser_url`, `scene_revision`, and `screenshots`. These are persisted under:
+
+```text
+.jupyter-workbench/sessions/review-1/visualizations/
+  manifests/active.json
+  screenshots/
+```
+
+## Capture a screenshot
+
+Screenshots are captured by executing Python in the same kernel that owns the live plotter. Prefer the helper because it creates the durable artifact directory and returns the artifact path.
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+from jupyter_workbench.adapters.visualization.screenshots import capture_screenshot
+shot = capture_screenshot('review-1', '.jupyter-workbench', 'scene1.png', plotter=plotter)
+print(shot)
+"
+```
+
+Direct pattern when a helper import is not appropriate:
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+from pathlib import Path
+path = Path('.jupyter-workbench/sessions/review-1/visualizations/screenshots/scene1.png')
+path.parent.mkdir(parents=True, exist_ok=True)
+plotter.screenshot(str(path))
+print(path)
+"
+```
+
+A later `snapshot` should include the screenshot path in `visualization_summary.screenshots`.
+
+## Observation loop
+
+Repeat this loop for human-in-the-loop work:
+
+1. `exec` creates or updates the PyVista scene.
+2. `plotter.show(jupyter_backend='trame')` provides a live browser scene.
+3. User observes and manipulates the browser-viewable scene.
+4. Agent captures screenshots or polls event helpers when available.
+5. Agent explains what changed and why in plain language before applying another `exec` update.
+
+For v0, event callbacks are a pattern taught by the skill, not a full durable event API. Use caller-managed cursors when adding local event helpers so one consumer does not steal another consumer's events.

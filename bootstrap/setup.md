@@ -105,11 +105,49 @@ Read the machine-readable session snapshot:
 jupyter-workbench snapshot --session-id review-1
 ```
 
-Snapshot reports kernel state, notebook path, cell count, recent execution summaries, artifact references, lineage pointer, and placeholder visualization fields.
+Snapshot reports kernel state, notebook path, cell count, recent execution summaries, artifact references, lineage pointer, and persisted visualization summaries including active scene URL, scene revision, and screenshots.
 
 ## Visualization
 
-Placeholder: start PyVista + trame scenes inside the persistent Jupyter kernel, expose browser URLs, poll events, and capture screenshots.
+Visualization runs inside the persistent Jupyter kernel through `exec`; there is no separate visualization daemon or CLI command. The runtime environment must import the v0 visualization dependencies: `pyvista`, `trame`, `trame-vtk`, `trame-vuetify`, `ipywidgets`, and `nest_asyncio2`.
+
+Verify imports when bootstrapping a new environment:
+
+```bash
+uv run python -c "import pyvista, trame, trame_vtk, trame_vuetify, ipywidgets, nest_asyncio2; print('viz ok')"
+```
+
+Create and show a live browser-viewable scene from notebook-executed Python:
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+import pyvista as pv
+plotter = pv.Plotter()
+plotter.add_mesh(pv.Sphere(), color='tomato')
+plotter.add_axes()
+plotter.show(jupyter_backend='trame')
+"
+```
+
+When trame display data includes a URL, `exec` persists scene metadata under:
+
+```text
+.jupyter-workbench/sessions/review-1/visualizations/manifests/active.json
+```
+
+The `exec` result includes `visualization_delta`, and `snapshot` includes the same scene in `visualization_summary`. Ask the user to open the browser URL for live review; do not reduce user-facing visualization to text-only summaries.
+
+Capture a screenshot by executing code in the same kernel that still owns `plotter`:
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+from jupyter_workbench.adapters.visualization.screenshots import capture_screenshot
+shot = capture_screenshot('review-1', '.jupyter-workbench', 'scene1.png', plotter=plotter)
+print(shot)
+"
+```
+
+Screenshots are written under `sessions/<session_id>/visualizations/screenshots/` and appear in later snapshots. If the helper cannot find a plotter, pass the live plotter explicitly as `plotter=plotter`.
 
 ## Cleanup and lineage
 

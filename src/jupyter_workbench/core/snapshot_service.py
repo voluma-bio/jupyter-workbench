@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from jupyter_workbench.core.interfaces import KernelPort, NotebookPort
+from jupyter_workbench.core.interfaces import KernelPort, NotebookPort, VisualizationPort
 from jupyter_workbench.core.models import SnapshotResult
 from jupyter_workbench.core.session_service import SessionNotFoundError
 
@@ -19,10 +19,12 @@ class SnapshotService:
         notebook: NotebookPort,
         kernel: KernelPort | None = None,
         root_dir: Path | None = None,
+        visualization: VisualizationPort | None = None,
     ) -> None:
         self.notebook = notebook
         self.kernel = kernel
         self.root_dir = root_dir or Path(".jupyter-workbench")
+        self.visualizations = visualization
 
     def snapshot(self, session_id: str | None = None) -> SnapshotResult:
         """Return a machine-readable snapshot for a session."""
@@ -39,13 +41,34 @@ class SnapshotService:
             notebook_path=str(notebook_path),
             cell_count=len(cells),
             recent_outputs=self._recent_outputs(cells[-5:], len(cells) - min(len(cells), 5)),
-            visualization_summary={"status": str(manifest.get("visualization_status", "visualization_absent")), "items": []},
+            visualization_summary=self._visualization_summary(resolved_session_id, manifest),
             lineage_summary={
                 "active_notebook": str(notebook_path),
                 "revision": manifest.get("notebook_revision", 0),
                 "source_notebook": str(notebook_path),
             },
         )
+
+
+    def _visualization_summary(
+        self,
+        session_id: str,
+        manifest: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self.visualizations is None:
+            scenes: list[dict[str, Any]] = []
+            screenshots: list[str] = []
+            active = None
+        else:
+            scenes = self.visualizations.list_scenes(session_id)
+            screenshots = self.visualizations.screenshot_paths(session_id)
+            active = self.visualizations.get_active_scene(session_id)
+        return {
+            "status": str(manifest.get("visualization_status", "visualization_absent")),
+            "active_scene": active,
+            "items": scenes,
+            "screenshots": screenshots,
+        }
 
     def _recent_outputs(self, cells: list[dict[str, Any]], start_index: int) -> list[dict[str, Any]]:
         recent: list[dict[str, Any]] = []

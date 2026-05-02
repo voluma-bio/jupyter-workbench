@@ -11,6 +11,7 @@ from rich.table import Table
 
 from jupyter_workbench.adapters.kernel.jupyter_client_manager import JupyterClientManager
 from jupyter_workbench.adapters.notebook.nbformat_store import NbformatStore
+from jupyter_workbench.adapters.visualization.pyvista_trame import PyVistaTrameHelper
 from dataclasses import asdict
 
 from jupyter_workbench.core.execution_service import ExecutionService
@@ -33,12 +34,22 @@ def _service(root_dir: Path) -> SessionService:
 
 def _execution_service(root_dir: Path) -> ExecutionService:
     kernel, notebook = _adapters(root_dir)
-    return ExecutionService(kernel=kernel, notebook=notebook, root_dir=root_dir)
+    return ExecutionService(
+        kernel=kernel,
+        notebook=notebook,
+        root_dir=root_dir,
+        visualization=PyVistaTrameHelper(root_dir),
+    )
 
 
 def _snapshot_service(root_dir: Path) -> SnapshotService:
     kernel, notebook = _adapters(root_dir)
-    return SnapshotService(kernel=kernel, notebook=notebook, root_dir=root_dir)
+    return SnapshotService(
+        kernel=kernel,
+        notebook=notebook,
+        root_dir=root_dir,
+        visualization=PyVistaTrameHelper(root_dir),
+    )
 
 
 def _print_session(info: SessionInfo) -> None:
@@ -67,6 +78,8 @@ def _print_exec(result: ExecResult) -> None:
     table.add_row("output_size_warning", str(result.output_size_warning))
     for artifact in result.output_artifacts:
         table.add_row("artifact", artifact)
+    if result.visualization_delta:
+        table.add_row("visualization_delta", str(result.visualization_delta))
     console.print(table)
     if result.inline_summary:
         console.print(result.inline_summary)

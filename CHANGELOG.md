@@ -5,6 +5,8 @@ Caveman style. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- PyVista/trame visualization manifest tracking and screenshot helper flow.
+- `pyvista-interactive` skill and bootstrap guidance for live scene URL and screenshots.
 - Notebook-backed `exec`, `exec --file`, `markdown`, and `snapshot` CLI paths.
 - Bounded execution summaries with output and traceback artifact handles.
 - Public DTO, port, service constructor, CLI signature, and MCP skeleton contracts.
