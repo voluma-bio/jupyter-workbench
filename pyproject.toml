@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jupyter-workbench"
+version = "0.1.0"
+description = "Reusable Jupyter session, notebook lineage, and visualization skill package"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "jupyter_client",
+    "nbformat",
+    "ipywidgets",
+    "nest_asyncio2",
+    "typer>=0.9",
+    "rich",
+    "pyvista",
+    "trame",
+    "trame-vtk",
+    "trame-vuetify",
+]
+
+[project.optional-dependencies]
+mcp = ["fastmcp"]
+dev = ["pytest", "ruff", "pyright"]
+
+[project.scripts]
+jupyter-workbench = "jupyter_workbench.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jupyter_workbench"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.pyright]
+pythonVersion = "3.10"
+include = ["src"]

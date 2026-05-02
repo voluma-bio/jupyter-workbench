@@ -1,0 +1,1 @@
+"""Visualization screenshot helper placeholder."""

@@ -1,0 +1,23 @@
+[package]
+name = "jupyter-workbench"
+version = "0.1.0"
+description = "Reusable Jupyter session, notebook lineage, and visualization skill package"
+
+[package.bootstrap]
+path = "bootstrap/setup.md"
+
+[[package.skills]]
+name = "session-management"
+path = "skills/session-management"
+
+[[package.skills]]
+name = "notebook-lineage"
+path = "skills/notebook-lineage"
+
+[[package.skills]]
+name = "compaction-cleanup"
+path = "skills/compaction-cleanup"
+
+[[package.skills]]
+name = "pyvista-interactive"
+path = "skills/pyvista-interactive"

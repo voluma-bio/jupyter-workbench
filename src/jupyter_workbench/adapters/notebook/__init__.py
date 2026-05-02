@@ -1,0 +1,1 @@
+"""Notebook persistence adapter package."""
