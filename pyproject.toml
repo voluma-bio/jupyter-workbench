@@ -19,6 +19,7 @@ dependencies = [
     "trame",
     "trame-vtk",
     "trame-vuetify",
+    "ipykernel>=7.2.0",
 ]
 
 [project.optional-dependencies]
