@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from jupyter_workbench.core.interfaces import KernelPort, NotebookPort
 from jupyter_workbench.core.models import SessionInfo, SessionList
+from jupyter_workbench.core.session_lock import SessionLock
 
 
 class SessionNotFoundError(FileNotFoundError):
@@ -29,6 +30,7 @@ class SessionService:
         self.kernel = kernel
         self.notebook = notebook
         self.root_dir = root_dir or Path(".jupyter-workbench")
+        self.locks = SessionLock(self.root_dir)
 
     def open(self, session_id: str | None = None) -> SessionInfo:
         """Open or attach to a workbench session."""
@@ -48,42 +50,53 @@ class SessionService:
             manifest["status"] = "kernel_degraded"
             return self._info_from_manifest(manifest, "kernel_degraded")
 
-        session_dir = self._session_dir(resolved_session_id)
-        notebook_path = session_dir / "notebooks" / "active.ipynb"
-        self._create_layout(session_dir)
-        self.notebook.create(notebook_path)
-        manifest = {
-            "session_id": resolved_session_id,
-            "root_dir": str(self.root_dir),
-            "notebook_path": self._relative_to_root(notebook_path),
-            "created_at": self._now(),
-            "status": "creating",
-            "visualization_status": "visualization_absent",
-        }
-        self._write_manifest(resolved_session_id, manifest)
-        try:
-            self.kernel.start(resolved_session_id)
-        except Exception:
-            manifest["status"] = "create_failed"
+        with self.locks.acquire(resolved_session_id):
+            if manifest_path.exists():
+                manifest = self._read_manifest(resolved_session_id)
+                if self._is_kernel_alive(resolved_session_id):
+                    manifest["status"] = "active"
+                    return self._info_from_manifest(manifest, "active")
+                manifest["status"] = "kernel_degraded"
+                return self._info_from_manifest(manifest, "kernel_degraded")
+            session_dir = self._session_dir(resolved_session_id)
+            notebook_path = session_dir / "notebooks" / "active.ipynb"
+            self._create_layout(session_dir)
+            self.notebook.create(notebook_path)
+            manifest = {
+                "session_id": resolved_session_id,
+                "root_dir": str(self.root_dir),
+                "notebook_path": self._relative_to_root(notebook_path),
+                "created_at": self._now(),
+                "status": "creating",
+                "visualization_status": "visualization_absent",
+                "notebook_revision": 0,
+            }
             self._write_manifest(resolved_session_id, manifest)
-            self.kernel.shutdown(resolved_session_id)
-            raise
-        manifest["status"] = "active"
-        self._write_manifest(resolved_session_id, manifest)
-        return self._info_from_manifest(manifest, "active")
+            self._write_initial_lineage(resolved_session_id, notebook_path)
+            try:
+                self.kernel.start(resolved_session_id)
+            except Exception:
+                manifest["status"] = "create_failed"
+                self._write_manifest(resolved_session_id, manifest)
+                self.kernel.shutdown(resolved_session_id)
+                raise
+            manifest["status"] = "active"
+            self._write_manifest(resolved_session_id, manifest)
+            return self._info_from_manifest(manifest, "active")
 
     def close(self, session_id: str) -> SessionInfo:
         """Close live resources for a session while preserving artifacts."""
-        manifest = self._read_manifest(session_id)
-        shutdown_succeeded = self.kernel.shutdown(session_id)
-        if shutdown_succeeded:
-            manifest["status"] = "closed"
-            warning = None
-        else:
-            manifest["status"] = "close_failed"
-            warning = "kernel shutdown failed; session resources may still be running"
-        self._write_manifest(session_id, manifest)
-        return self._info_from_manifest(manifest, str(manifest["status"]), warning=warning)
+        with self.locks.acquire(session_id):
+            manifest = self._read_manifest(session_id)
+            shutdown_succeeded = self.kernel.shutdown(session_id)
+            if shutdown_succeeded:
+                manifest["status"] = "closed"
+                warning = None
+            else:
+                manifest["status"] = "close_failed"
+                warning = "kernel shutdown failed; session resources may still be running"
+            self._write_manifest(session_id, manifest)
+            return self._info_from_manifest(manifest, str(manifest["status"]), warning=warning)
 
     def status(self, session_id: str) -> SessionInfo:
         """Return status for one session."""
@@ -151,6 +164,18 @@ class SessionService:
         tmp_path = manifest_path.with_suffix(".json.tmp")
         tmp_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         tmp_path.replace(manifest_path)
+
+    def _write_initial_lineage(self, session_id: str, notebook_path: Path) -> None:
+        lineage_path = self._session_dir(session_id) / "lineage.json"
+        lineage = {
+            "session_id": session_id,
+            "source_notebook": self._relative_to_root(notebook_path),
+            "derived_notebooks": [],
+            "revisions": [],
+        }
+        tmp_path = lineage_path.with_suffix(".json.tmp")
+        tmp_path.write_text(json.dumps(lineage, indent=2, sort_keys=True) + "\n")
+        tmp_path.replace(lineage_path)
 
     def _info_from_manifest(
         self,

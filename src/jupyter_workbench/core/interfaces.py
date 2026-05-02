@@ -109,6 +109,10 @@ class NotebookPort(Protocol):
         """Read notebook cells as serializable dictionaries."""
         ...
 
+    def clear_code_outputs(self, path: Path) -> None:
+        """Clear outputs and execution counts from all code cells."""
+        ...
+
     def cell_count(self, path: Path) -> int:
         """Return the number of cells in a notebook."""
         ...

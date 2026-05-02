@@ -65,6 +65,15 @@ class NbformatStore:
         notebook = self._read(path)
         return [dict(cell) for cell in notebook.cells]
 
+    def clear_code_outputs(self, path: Path) -> None:
+        """Clear outputs and execution counts from all code cells."""
+        notebook = self._read(path)
+        for cell in notebook.cells:
+            if cell.get("cell_type") == "code":
+                cell.outputs = []
+                cell.execution_count = None
+        self._write(path, notebook)
+
     def cell_count(self, path: Path) -> int:
         """Return the number of cells in a notebook."""
         return len(self._read(path).cells)

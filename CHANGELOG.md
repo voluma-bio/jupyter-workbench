@@ -5,6 +5,8 @@ Caveman style. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Explicit `replay` and `lineage` CLI/service paths with replay revision metadata.
+- Per-session mutation lock for notebook-affecting session, execution, and replay operations.
 - PyVista/trame visualization manifest tracking and screenshot helper flow.
 - `pyvista-interactive` skill and bootstrap guidance for live scene URL and screenshots.
 - Notebook-backed `exec`, `exec --file`, `markdown`, and `snapshot` CLI paths.

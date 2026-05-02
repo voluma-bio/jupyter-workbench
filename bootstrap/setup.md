@@ -57,7 +57,7 @@ Close live runtime resources while preserving artifacts:
 jupyter-workbench close review-1
 ```
 
-Close does not delete the manifest, active notebook, outputs, visualization event logs, or screenshots. A session whose durable state remains but whose kernel is unavailable reports `kernel_degraded`; explicit replay is the recovery path in a later phase.
+Close does not delete the manifest, active notebook, outputs, visualization event logs, or screenshots. A session whose durable state remains but whose kernel is unavailable reports `kernel_degraded`; explicit replay is the recovery path.
 
 A new session creates:
 
@@ -67,8 +67,10 @@ A new session creates:
     <session_id>/
       manifest.json
       kernel.json
+      lineage.json
       notebooks/
         active.ipynb
+        revision_N.ipynb
       outputs/
       visualizations/
         manifests/
@@ -149,6 +151,22 @@ print(shot)
 
 Screenshots are written under `sessions/<session_id>/visualizations/screenshots/` and appear in later snapshots. If the helper cannot find a plotter, pass the live plotter explicitly as `plotter=plotter`.
 
-## Cleanup and lineage
+## Recovery and lineage
 
-Placeholder: inspect lineage, replay sessions, derive notebooks, and compact history for cheaper cleanup agents.
+Inspect lineage without touching the live kernel:
+
+```bash
+jupyter-workbench lineage review-1
+```
+
+Replay a degraded or intentionally reconstructed session through a fresh kernel:
+
+```bash
+jupyter-workbench replay review-1
+```
+
+Replay backs up the current active notebook to `notebooks/revision_N.ipynb`, clears active code-cell outputs, re-executes code cells in order, updates `lineage.json`, and records `notebook_revision` in the manifest. Visualization setup cells are just notebook code, so replay reconstructs the notebook-backed visualization path; a new browser URL may be surfaced by the re-executed trame display.
+
+If replay fails, the command returns `status: replay_failed`, `failed_cell`, and an `error_artifact` path under `outputs/`. Prior notebook artifacts remain available, and the manifest is marked `replay_failed` for explicit follow-up.
+
+Per-session mutation locking serializes `open` when creating, `exec`, `markdown`, `replay`, and `close`. Read-only commands (`snapshot`, `status`, `list`, `lineage`) do not take the mutation lock and report the latest committed durable state.

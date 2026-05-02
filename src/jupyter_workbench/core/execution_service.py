@@ -9,6 +9,7 @@ from typing import Any
 from jupyter_workbench.core.interfaces import ExecutionOutput, KernelPort, NotebookPort, VisualizationPort
 from jupyter_workbench.core.models import ExecResult, NotebookMutationResult
 from jupyter_workbench.core.session_service import SessionNotFoundError
+from jupyter_workbench.core.session_lock import SessionLock
 
 INLINE_LIMIT_BYTES = 64 * 1024
 OUTPUT_WARNING_BYTES = 1024 * 1024
@@ -28,6 +29,7 @@ class ExecutionService:
         self.notebook = notebook
         self.root_dir = root_dir or Path(".jupyter-workbench")
         self.visualizations = visualization
+        self.locks = SessionLock(self.root_dir)
 
     def exec_code(
         self,
@@ -52,14 +54,15 @@ class ExecutionService:
     def markdown(self, text: str, *, session_id: str | None = None) -> NotebookMutationResult:
         """Append markdown text to a session notebook."""
         resolved_session_id = self._resolve_session_id(session_id)
-        manifest = self._read_manifest(resolved_session_id)
-        notebook_path = self._notebook_path(manifest)
-        cell_index = self.notebook.append_markdown_cell(notebook_path, text)
-        return NotebookMutationResult(
-            session_id=resolved_session_id,
-            cell_index=cell_index,
-            cell_type="markdown",
-        )
+        with self.locks.acquire(resolved_session_id):
+            manifest = self._read_manifest(resolved_session_id)
+            notebook_path = self._notebook_path(manifest)
+            cell_index = self.notebook.append_markdown_cell(notebook_path, text)
+            return NotebookMutationResult(
+                session_id=resolved_session_id,
+                cell_index=cell_index,
+                cell_type="markdown",
+            )
 
     def _execute_source(
         self,
@@ -69,51 +72,56 @@ class ExecutionService:
         metadata: dict[str, Any],
     ) -> ExecResult:
         resolved_session_id = self._resolve_session_id(session_id)
-        manifest = self._read_manifest(resolved_session_id)
-        notebook_path = self._notebook_path(manifest)
+        with self.locks.acquire(resolved_session_id):
+            manifest = self._read_manifest(resolved_session_id)
+            notebook_path = self._notebook_path(manifest)
 
-        cell_index = self.notebook.append_code_cell(notebook_path, source, [], metadata=metadata)
-        execution = self.kernel.execute(resolved_session_id, source)
-        outputs = self._notebook_outputs(execution)
-        self.notebook.update_code_cell_outputs(
-            notebook_path,
-            cell_index,
-            outputs,
-            execution_count=cell_index,
-        )
-
-        full_output = self._full_output_text(execution)
-        output_artifacts: list[str] = []
-        inline_summary = full_output
-        if self._byte_len(full_output) > INLINE_LIMIT_BYTES:
-            artifact = self._write_output_artifact(resolved_session_id, cell_index, "output.txt", full_output)
-            output_artifacts.append(artifact)
-            inline_summary = self._truncate_text(full_output, INLINE_LIMIT_BYTES)
-            inline_summary += f"\n\n[truncated; full output: {artifact}]"
-
-        error_traceback = execution.error
-        if execution.error:
-            artifact = self._write_output_artifact(
-                resolved_session_id,
+            cell_index = self.notebook.append_code_cell(notebook_path, source, [], metadata=metadata)
+            execution = self.kernel.execute(resolved_session_id, source)
+            outputs = self._notebook_outputs(execution)
+            self.notebook.update_code_cell_outputs(
+                notebook_path,
                 cell_index,
-                "traceback.txt",
-                execution.error,
+                outputs,
+                execution_count=cell_index,
             )
-            output_artifacts.append(artifact)
 
-        visualization_delta = self._record_visualization_delta(resolved_session_id, execution)
+            full_output = self._full_output_text(execution)
+            output_artifacts: list[str] = []
+            inline_summary = full_output
+            if self._byte_len(full_output) > INLINE_LIMIT_BYTES:
+                artifact = self._write_output_artifact(
+                    resolved_session_id,
+                    cell_index,
+                    "output.txt",
+                    full_output,
+                )
+                output_artifacts.append(artifact)
+                inline_summary = self._truncate_text(full_output, INLINE_LIMIT_BYTES)
+                inline_summary += f"\n\n[truncated; full output: {artifact}]"
 
-        status = "error" if execution.error else "ok"
-        return ExecResult(
-            session_id=resolved_session_id,
-            cell_index=cell_index,
-            status=status,
-            inline_summary=inline_summary,
-            output_artifacts=output_artifacts,
-            error_traceback=error_traceback,
-            visualization_delta=visualization_delta,
-            output_size_warning=self._byte_len(full_output) > OUTPUT_WARNING_BYTES,
-        )
+            error_traceback = execution.error
+            if execution.error:
+                artifact = self._write_output_artifact(
+                    resolved_session_id,
+                    cell_index,
+                    "traceback.txt",
+                    execution.error,
+                )
+                output_artifacts.append(artifact)
+
+            visualization_delta = self._record_visualization_delta(resolved_session_id, execution)
+
+            return ExecResult(
+                session_id=resolved_session_id,
+                cell_index=cell_index,
+                status="error" if execution.error else "ok",
+                inline_summary=inline_summary,
+                output_artifacts=output_artifacts,
+                error_traceback=error_traceback,
+                visualization_delta=visualization_delta,
+                output_size_warning=self._byte_len(full_output) > OUTPUT_WARNING_BYTES,
+            )
 
 
     def _record_visualization_delta(

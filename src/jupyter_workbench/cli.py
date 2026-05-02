@@ -15,7 +15,16 @@ from jupyter_workbench.adapters.visualization.pyvista_trame import PyVistaTrameH
 from dataclasses import asdict
 
 from jupyter_workbench.core.execution_service import ExecutionService
-from jupyter_workbench.core.models import ExecResult, NotebookMutationResult, SessionInfo, SessionList, SnapshotResult
+from jupyter_workbench.core.lineage_service import LineageService
+from jupyter_workbench.core.models import (
+    ExecResult,
+    LineageInfo,
+    NotebookMutationResult,
+    ReplayResult,
+    SessionInfo,
+    SessionList,
+    SnapshotResult,
+)
 from jupyter_workbench.core.snapshot_service import SnapshotService
 from jupyter_workbench.core.session_service import SessionNotFoundError, SessionService
 
@@ -50,6 +59,11 @@ def _snapshot_service(root_dir: Path) -> SnapshotService:
         root_dir=root_dir,
         visualization=PyVistaTrameHelper(root_dir),
     )
+
+
+def _lineage_service(root_dir: Path) -> LineageService:
+    kernel, notebook = _adapters(root_dir)
+    return LineageService(kernel=kernel, notebook=notebook, root_dir=root_dir)
 
 
 def _print_session(info: SessionInfo) -> None:
@@ -97,6 +111,15 @@ def _print_mutation(result: NotebookMutationResult) -> None:
 
 def _print_snapshot(result: SnapshotResult) -> None:
     console.print_json(data=asdict(result))
+
+
+def _print_replay(result: ReplayResult) -> None:
+    console.print_json(data=asdict(result))
+
+
+def _print_lineage(result: LineageInfo) -> None:
+    console.print_json(data=asdict(result))
+
 
 def _print_session_list(session_list: SessionList) -> None:
     table = Table(title="Jupyter Workbench Sessions")
@@ -243,17 +266,31 @@ def close(
 @app.command("replay")
 def replay(
     session_id: Annotated[str, typer.Argument(help="Session id to replay.")],
+    root_dir: Annotated[
+        Path,
+        typer.Option("--root-dir", help="Durable workbench root directory."),
+    ] = Path(".jupyter-workbench"),
 ) -> None:
     """Replay notebook lineage into a fresh runtime."""
-    _not_implemented()
+    try:
+        _print_replay(_lineage_service(root_dir).replay(session_id))
+    except SessionNotFoundError as error:
+        _handle_missing_session(error)
 
 
 @app.command("lineage")
 def lineage(
     session_id: Annotated[str, typer.Argument(help="Session id to inspect.")],
+    root_dir: Annotated[
+        Path,
+        typer.Option("--root-dir", help="Durable workbench root directory."),
+    ] = Path(".jupyter-workbench"),
 ) -> None:
     """Inspect notebook lineage."""
-    _not_implemented()
+    try:
+        _print_lineage(_lineage_service(root_dir).lineage(session_id))
+    except SessionNotFoundError as error:
+        _handle_missing_session(error)
 
 
 @app.command("derive")
