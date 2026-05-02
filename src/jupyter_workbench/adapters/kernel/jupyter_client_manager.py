@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import signal
 import time
 from pathlib import Path
 from typing import Any, cast
@@ -29,7 +30,11 @@ class JupyterClientManager:
         manager = KernelManager(connection_file=str(connection_file))
         env = os.environ.copy()
         env["JPY_PARENT_PID"] = "0"
-        manager.start_kernel(env=env, extra_arguments=["--IPKernelApp.parent_handle=0"], independent=True)
+        manager.start_kernel(
+            env=env,
+            extra_arguments=["--IPKernelApp.parent_handle=0", "--no-stdout", "--no-stderr"],
+            independent=True,
+        )
         self._managers[session_id] = manager
         manager.write_connection_file()
         # The session connection file is durable workbench state, not a temp file.
@@ -42,6 +47,7 @@ class JupyterClientManager:
             self.shutdown(session_id)
             raise
         self._clients[session_id] = client
+        self._write_kernel_pid(session_id, manager)
 
     def connect(self, session_id: str, connection_file: str) -> None:
         """Connect to an existing kernel for a session."""
@@ -133,32 +139,74 @@ class JupyterClientManager:
         """Stop a session kernel if it is running."""
         client = self._clients.pop(session_id, None)
         manager = self._managers.pop(session_id, None)
+
+        if manager is None:
+            connection_file = self._connection_file(session_id)
+            if connection_file.exists():
+                try:
+                    manager = KernelManager(connection_file=str(connection_file))
+                    manager.load_connection_file()
+                except Exception:
+                    manager = None
+
         if manager is not None:
             try:
                 manager.shutdown_kernel(now=True)
             except Exception:
-                pass
+                self._kill_manager_process(manager)
+            if self.probe_alive(session_id):
+                self._kill_manager_process(manager)
+                self._kill_pid_file(session_id)
         else:
-            if client is None:
-                connection_file = self._connection_file(session_id)
-                if connection_file.exists():
-                    try:
-                        client = BlockingKernelClient(connection_file=str(connection_file))
-                        client.load_connection_file(str(connection_file))
-                        client.start_channels(shell=False, iopub=False, stdin=False, hb=False)
-                    except Exception:
-                        client = None
-            if client is not None:
-                try:
-                    client.shutdown(restart=False)
-                except Exception:
-                    pass
+            self._kill_pid_file(session_id)
         if client is not None:
             try:
                 client.stop_channels()
             except Exception:
                 pass
+        time.sleep(0.5)
         return not self.probe_alive(session_id)
 
     def _connection_file(self, session_id: str) -> Path:
         return self.root_dir / "sessions" / session_id / "kernel.json"
+
+    def _pid_file(self, session_id: str) -> Path:
+        return self.root_dir / "sessions" / session_id / "kernel.pid"
+
+    def _write_kernel_pid(self, session_id: str, manager: KernelManager) -> None:
+        provisioner = getattr(manager, "provisioner", None)
+        pid = getattr(provisioner, "pid", None)
+        if not isinstance(pid, int):
+            return
+        pid_file = self._pid_file(session_id)
+        tmp_file = pid_file.with_suffix(".pid.tmp")
+        tmp_file.write_text(f"{pid}\n")
+        tmp_file.replace(pid_file)
+
+    def _kill_manager_process(self, manager: KernelManager) -> None:
+        try:
+            kernel = getattr(manager, "kernel", None)
+            if kernel is not None:
+                kernel.kill()
+                kernel.wait(timeout=5)
+        except Exception:
+            pass
+
+    def _kill_pid_file(self, session_id: str) -> None:
+        try:
+            pid = int(self._pid_file(session_id).read_text().strip())
+        except (OSError, ValueError):
+            return
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except Exception:
+            return
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if not self.probe_alive(session_id):
+                return
+            time.sleep(0.1)
+        try:
+            os.kill(pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+        except Exception:
+            pass
