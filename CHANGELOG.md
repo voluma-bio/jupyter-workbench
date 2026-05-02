@@ -4,6 +4,10 @@ Caveman style. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- `pyvista-interactive` skill: event poll/wait examples used `events` for both the log object and the returned list, shadowing the log and breaking subsequent `.wait()` calls. Use `records` for the returned data, consistent with `bootstrap/setup.md`.
+- `bootstrap/setup.md`: add `events.jsonl` to session directory tree (was documented in the body but absent from the tree).
+
 ### Added
 - Cheap-agent compaction cleanup skill and bootstrap handoff workflow.
 - Detailed lineage inspection with full revision history, active notebook, and derived-state fields.
