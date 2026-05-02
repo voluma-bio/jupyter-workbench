@@ -12,7 +12,7 @@ Use this skill for the canonical cheap-agent cleanup workflow after expensive no
 - `jupyter-workbench` CLI is installed and available.
 - An existing session has notebook history under the configured workbench root.
 - The expensive analysis agent has finished the analysis story and, when visualization was used, has preserved durable artifacts such as snapshots, screenshots, outputs, event logs, and notebook cells.
-- Know the session id. Use explicit `--session-id <id>` for handoff work.
+- Know the session id. Use explicit positional `<session_id>` arguments for handoff work on lineage commands.
 
 ## When to use
 
@@ -32,7 +32,7 @@ Do not use cleanup to reinterpret the analysis, delete accepted decisions, or re
 Start from the durable lineage record:
 
 ```bash
-jupyter-workbench lineage --session-id <session-id>
+jupyter-workbench lineage <session-id>
 ```
 
 Read the reported `active_notebook`, `revisions`, derived notebooks, compacted notebooks, replay history, and `is_derived` state. The lineage tells you which notebook is current and which source notebooks must remain preserved.
@@ -66,7 +66,7 @@ Keep cells that carry durable meaning:
 Before any manual notebook edits or exploratory cleanup, derive a fresh notebook:
 
 ```bash
-jupyter-workbench derive --session-id <session-id>
+jupyter-workbench derive <session-id>
 ```
 
 `derive` copies every cell from the current active notebook into a new `sessions/<id>/notebooks/derived_N.ipynb`, records the source relationship in `lineage.json`, and makes the derived notebook active. Future writes go to the derived notebook while the source notebook remains unchanged.
@@ -76,7 +76,7 @@ jupyter-workbench derive --session-id <session-id>
 For the common case, let `compact` remove failed code cells that have later successful code cells:
 
 ```bash
-jupyter-workbench compact --session-id <session-id>
+jupyter-workbench compact <session-id>
 ```
 
 This creates a new compacted notebook, records kept/removed cells in lineage metadata, and makes the compacted notebook active.
@@ -86,7 +86,7 @@ This creates a new compacted notebook, records kept/removed cells in lineage met
 When you have inspected cells and know exact dead ends, pass explicit cell indexes:
 
 ```bash
-jupyter-workbench compact --session-id <session-id> -c 3 -c 5 -c 7
+jupyter-workbench compact <session-id> -c 3 -c 5 -c 7
 ```
 
 Use explicit cells for duplicate displays, abandoned experiments, and noisy debug cells that automatic compaction cannot infer. Explain why each removed cell is safe to omit from the accepted story.
@@ -96,7 +96,7 @@ Use explicit cells for duplicate displays, abandoned experiments, and noisy debu
 After compaction, inspect lineage and snapshot again:
 
 ```bash
-jupyter-workbench lineage --session-id <session-id>
+jupyter-workbench lineage <session-id>
 jupyter-workbench snapshot --session-id <session-id>
 ```
 

@@ -41,7 +41,7 @@ class LineageService:
         metadata = self._read_lineage(session_id, notebook_path)
         notebooks_dir = self._session_dir(session_id) / "notebooks"
         revisions = self._revision_records(metadata)
-        revision_count = len(revisions)
+        revision_count = len([revision for revision in revisions if revision.get("type") == "replay"])
         if revision_count == 0:
             revision_count = len(list(notebooks_dir.glob("revision_*.ipynb")))
         derived_notebooks = [self._rooted_path(str(path)) for path in metadata.get("derived_notebooks", [])]
@@ -126,8 +126,8 @@ class LineageService:
                     "revision": revision,
                     "created_at": self._now(),
                     "type": "replay",
-                    "source": "active.ipynb",
-                    "backup": revision_path.name,
+                    "source": self._relative_to_root(notebook_path),
+                    "backup": self._relative_to_root(revision_path),
                 }
             )
             self._write_lineage(session_id, lineage)
