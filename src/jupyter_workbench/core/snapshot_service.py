@@ -34,15 +34,16 @@ class SnapshotService:
         notebook_path = self._notebook_path(manifest)
         cells = self.notebook.read_cells(notebook_path)
         kernel_status = self._kernel_status(resolved_session_id, manifest)
+        visualization_summary = self._visualization_summary(resolved_session_id, manifest)
         return SnapshotResult(
             session_id=resolved_session_id,
             root_dir=str(self.root_dir),
             kernel_status=kernel_status,
-            visualization_status=str(manifest.get("visualization_status", "visualization_absent")),
+            visualization_status=str(visualization_summary["status"]),
             notebook_path=str(notebook_path),
             cell_count=len(cells),
             recent_outputs=self._recent_outputs(cells[-5:], len(cells) - min(len(cells), 5)),
-            visualization_summary=self._visualization_summary(resolved_session_id, manifest),
+            visualization_summary=visualization_summary,
             lineage_summary={
                 "active_notebook": str(notebook_path),
                 "revision": manifest.get("notebook_revision", 0),
@@ -61,17 +62,29 @@ class SnapshotService:
             scenes: list[dict[str, Any]] = []
             screenshots: list[str] = []
             active = None
+            degraded = False
         else:
             scenes = self.visualizations.list_scenes(session_id)
             screenshots = self.visualizations.screenshot_paths(session_id)
             active = self.visualizations.get_active_scene(session_id)
-        return {
-            "status": str(manifest.get("visualization_status", "visualization_absent")),
+            degraded = self.visualizations.detect_degradation(session_id)
+        status = str(manifest.get("visualization_status", "visualization_absent"))
+        if degraded:
+            status = "visualization_degraded"
+        degraded_scenes = [scene for scene in scenes if scene.get("status") == "degraded"]
+        summary: dict[str, Any] = {
+            "status": status,
             "active_scene": active,
             "items": scenes,
+            "degraded_scenes": degraded_scenes,
             "screenshots": screenshots,
             "scene_revision": active.get("scene_revision") if active else None,
         }
+        if degraded:
+            summary["recovery_guidance"] = (
+                "re-execute scene setup code through jupyter-workbench exec to reconstruct"
+            )
+        return summary
 
     def _event_summary(self, session_id: str) -> dict[str, Any]:
         events, cursor = DurableEventLog(self.root_dir, session_id).read(0)

@@ -107,7 +107,19 @@ Read the machine-readable session snapshot:
 jupyter-workbench snapshot --session-id review-1
 ```
 
-Snapshot reports kernel state, notebook path, cell count, recent execution summaries, artifact references, lineage pointer, and persisted visualization summaries including active scene URL, scene revision, and screenshots.
+Snapshot reports kernel state, notebook path, cell count, recent execution summaries, artifact references, lineage pointer, and persisted visualization summaries including active scene URL, scene revision, screenshots, degraded scenes, and recovery guidance.
+
+## MCP server
+
+Install or run with the optional MCP extra, then expose the same service-backed tools through FastMCP:
+
+```bash
+uv run --extra mcp jupyter-workbench-mcp
+# or
+uv run --extra mcp fastmcp run jupyter_workbench.mcp:mcp
+```
+
+MCP tools are thin wrappers around the same core services as the CLI. They return the same DTO field semantics as JSON dictionaries and report missing sessions as `{"error": "..."}`. The MCP surface currently includes session, exec, markdown, snapshot, status, list, close, replay, and lineage operations; derive and compact remain hidden until core implementations exist.
 
 ## Visualization
 
@@ -138,6 +150,8 @@ When trame display data includes a URL, `exec` persists scene metadata under:
 ```
 
 The `exec` result includes `visualization_delta`, and `snapshot` includes the same scene in `visualization_summary`. Ask the user to open the browser URL for live review; do not reduce user-facing visualization to text-only summaries.
+
+If display data indicates PyVista/trame output but no browser URL is available, the scene is recorded as degraded. Snapshots then report `visualization_status: "visualization_degraded"`, list degraded scenes in `visualization_summary.degraded_scenes`, and include recovery guidance. The kernel remains usable: continue `exec`, `snapshot`, `lineage`, `replay`, and future derive/compact workflows. Recover by re-executing the scene setup code through `jupyter-workbench exec`; do not start a second runtime tool just to rebuild visualization state.
 
 Capture a screenshot by executing code in the same kernel that still owns `plotter`:
 

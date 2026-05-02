@@ -77,6 +77,14 @@ class VisualizationPort(Protocol):
         """Increment and persist scene revision metadata."""
         ...
 
+    def mark_degraded(self, session_id: str, viz_id: str) -> dict[str, Any]:
+        """Mark a persisted scene as degraded and return its manifest."""
+        ...
+
+    def detect_degradation(self, session_id: str) -> bool:
+        """Return whether any persisted scene is marked degraded."""
+        ...
+
 
 class EventLogPort(Protocol):
     """Port for durable visualization event logs."""

@@ -29,6 +29,7 @@ dev = ["pytest", "ruff", "pyright"]
 
 [project.scripts]
 jupyter-workbench = "jupyter_workbench.cli:app"
+jupyter-workbench-mcp = "jupyter_workbench.mcp:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jupyter_workbench"]

@@ -182,6 +182,20 @@ class PyVistaTrameHelper:
         self._write_scene(session_id, viz_id, manifest)
         return manifest
 
+    def mark_degraded(self, session_id: str, viz_id: str) -> dict[str, Any]:
+        """Mark a persisted scene as degraded and return its manifest."""
+        manifest = self._read_scene(session_id, viz_id)
+        if not manifest:
+            manifest = {"viz_id": viz_id, "browser_url": None, "scene_revision": 0}
+        manifest["status"] = "degraded"
+        manifest["updated_at"] = self._now()
+        self._write_scene(session_id, viz_id, manifest)
+        return manifest
+
+    def detect_degradation(self, session_id: str) -> bool:
+        """Return whether any persisted scene is marked degraded."""
+        return any(scene.get("status") == "degraded" for scene in self.list_scenes(session_id))
+
     def list_scenes(self, session_id: str) -> list[dict[str, Any]]:
         """Return all persisted scene manifests for a session."""
         manifests_dir = self._manifests_dir(session_id)

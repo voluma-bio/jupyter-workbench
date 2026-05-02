@@ -35,13 +35,25 @@ The execution result should surface `visualization_delta` when trame display out
 jupyter-workbench snapshot --session-id review-1
 ```
 
-Read `visualization_summary.active_scene.browser_url`, `scene_revision`, and `screenshots`. These are persisted under:
+Read `visualization_status`, `visualization_summary.active_scene.browser_url`, `scene_revision`, `degraded_scenes`, `recovery_guidance`, and `screenshots`. These are persisted under:
 
 ```text
 .jupyter-workbench/sessions/review-1/visualizations/
   manifests/active.json
   screenshots/
 ```
+
+## Recover degraded visualization
+
+A snapshot with `visualization_status: "visualization_degraded"` means the visualization layer failed or PyVista/trame display data did not surface a usable browser URL. The kernel can still be healthy and remains the source of truth for recovery. Continue using `jupyter-workbench exec`, `snapshot`, `lineage`, `replay`, and future derive/compact flows against the same session.
+
+Recovery path:
+
+1. Read `visualization_summary.degraded_scenes` and `recovery_guidance`.
+2. Re-execute the scene setup cell/code through `jupyter-workbench exec --session-id <id> ...`.
+3. Confirm the next `exec` result has `visualization_delta.scene.status == "healthy"` or the next snapshot returns `visualization_status: "visualization_healthy"`.
+
+Do not launch a second runtime tool to reconstruct the scene; rebuild it through the existing workbench kernel/session so notebook lineage remains authoritative.
 
 ## Capture a screenshot
 

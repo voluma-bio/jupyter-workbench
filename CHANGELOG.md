@@ -5,6 +5,8 @@ Caveman style. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- FastMCP adapter wrappers with CLI-equivalent DTO dictionary semantics.
+- Visualization degradation detection, snapshot reporting, and recovery guidance.
 - Durable visualization JSONL event log with caller-managed cursors and wait helper.
 - PyVista interaction callback helpers for pick, slider, key, and camera events.
 - Snapshot event summaries and active scene revision exposure.
