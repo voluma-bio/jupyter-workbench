@@ -11,17 +11,34 @@ from rich.table import Table
 
 from jupyter_workbench.adapters.kernel.jupyter_client_manager import JupyterClientManager
 from jupyter_workbench.adapters.notebook.nbformat_store import NbformatStore
-from jupyter_workbench.core.models import SessionInfo, SessionList
+from dataclasses import asdict
+
+from jupyter_workbench.core.execution_service import ExecutionService
+from jupyter_workbench.core.models import ExecResult, NotebookMutationResult, SessionInfo, SessionList, SnapshotResult
+from jupyter_workbench.core.snapshot_service import SnapshotService
 from jupyter_workbench.core.session_service import SessionNotFoundError, SessionService
 
 app = typer.Typer(help="Persistent Jupyter workbench sessions.")
 console = Console()
 
 
+def _adapters(root_dir: Path) -> tuple[JupyterClientManager, NbformatStore]:
+    return JupyterClientManager(root_dir=root_dir), NbformatStore()
+
+
 def _service(root_dir: Path) -> SessionService:
-    kernel = JupyterClientManager(root_dir=root_dir)
-    notebook = NbformatStore()
+    kernel, notebook = _adapters(root_dir)
     return SessionService(kernel=kernel, notebook=notebook, root_dir=root_dir)
+
+
+def _execution_service(root_dir: Path) -> ExecutionService:
+    kernel, notebook = _adapters(root_dir)
+    return ExecutionService(kernel=kernel, notebook=notebook, root_dir=root_dir)
+
+
+def _snapshot_service(root_dir: Path) -> SnapshotService:
+    kernel, notebook = _adapters(root_dir)
+    return SnapshotService(kernel=kernel, notebook=notebook, root_dir=root_dir)
 
 
 def _print_session(info: SessionInfo) -> None:
@@ -38,6 +55,35 @@ def _print_session(info: SessionInfo) -> None:
         table.add_row("warning", info.warning)
     console.print(table)
 
+
+
+def _print_exec(result: ExecResult) -> None:
+    table = Table(show_header=False, box=None)
+    table.add_column("Field", style="bold")
+    table.add_column("Value")
+    table.add_row("session_id", result.session_id)
+    table.add_row("cell_index", str(result.cell_index))
+    table.add_row("status", result.status)
+    table.add_row("output_size_warning", str(result.output_size_warning))
+    for artifact in result.output_artifacts:
+        table.add_row("artifact", artifact)
+    console.print(table)
+    if result.inline_summary:
+        console.print(result.inline_summary)
+
+
+def _print_mutation(result: NotebookMutationResult) -> None:
+    table = Table(show_header=False, box=None)
+    table.add_column("Field", style="bold")
+    table.add_column("Value")
+    table.add_row("session_id", result.session_id)
+    table.add_row("cell_index", str(result.cell_index))
+    table.add_row("cell_type", result.cell_type)
+    console.print(table)
+
+
+def _print_snapshot(result: SnapshotResult) -> None:
+    console.print_json(data=asdict(result))
 
 def _print_session_list(session_list: SessionList) -> None:
     table = Table(title="Jupyter Workbench Sessions")
@@ -91,9 +137,16 @@ def exec_code(
         Path | None,
         typer.Option("--file", help="Python file to execute as one notebook cell."),
     ] = None,
+    root_dir: Annotated[
+        Path,
+        typer.Option("--root-dir", help="Durable workbench root directory."),
+    ] = Path(".jupyter-workbench"),
 ) -> None:
     """Execute code in a workbench session."""
-    _not_implemented()
+    try:
+        _print_exec(_execution_service(root_dir).exec_code(code, session_id=session_id, file=file))
+    except SessionNotFoundError as error:
+        _handle_missing_session(error)
 
 
 @app.command("markdown")
@@ -103,9 +156,16 @@ def markdown(
         str | None,
         typer.Option("--session-id", "-s", help="Session id to append to."),
     ] = None,
+    root_dir: Annotated[
+        Path,
+        typer.Option("--root-dir", help="Durable workbench root directory."),
+    ] = Path(".jupyter-workbench"),
 ) -> None:
     """Append markdown to a workbench notebook."""
-    _not_implemented()
+    try:
+        _print_mutation(_execution_service(root_dir).markdown(text, session_id=session_id))
+    except SessionNotFoundError as error:
+        _handle_missing_session(error)
 
 
 @app.command("snapshot")
@@ -114,9 +174,16 @@ def snapshot(
         str | None,
         typer.Option("--session-id", "-s", help="Session id to snapshot."),
     ] = None,
+    root_dir: Annotated[
+        Path,
+        typer.Option("--root-dir", help="Durable workbench root directory."),
+    ] = Path(".jupyter-workbench"),
 ) -> None:
     """Report a machine-readable session snapshot."""
-    _not_implemented()
+    try:
+        _print_snapshot(_snapshot_service(root_dir).snapshot(session_id))
+    except SessionNotFoundError as error:
+        _handle_missing_session(error)
 
 
 @app.command("status")

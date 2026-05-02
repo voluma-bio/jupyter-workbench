@@ -18,14 +18,40 @@ class NbformatStore:
         notebook = nbformat.v4.new_notebook()
         nbformat.write(notebook, path)
 
-    def append_code_cell(self, path: Path, source: str, outputs: list[dict[str, Any]]) -> int:
+    def append_code_cell(
+        self,
+        path: Path,
+        source: str,
+        outputs: list[dict[str, Any]],
+        metadata: dict[str, Any] | None = None,
+    ) -> int:
         """Append a code cell and return its cell index."""
         notebook = self._read(path)
         cell_outputs = [NotebookNode(output) for output in outputs]
-        cell = nbformat.v4.new_code_cell(source=source, outputs=cell_outputs)
+        cell = nbformat.v4.new_code_cell(
+            source=source,
+            outputs=cell_outputs,
+            metadata=metadata or {},
+        )
         notebook.cells.append(cell)
         self._write(path, notebook)
         return len(notebook.cells) - 1
+
+    def update_code_cell_outputs(
+        self,
+        path: Path,
+        cell_index: int,
+        outputs: list[dict[str, Any]],
+        execution_count: int | None = None,
+    ) -> None:
+        """Update outputs for an existing code cell."""
+        notebook = self._read(path)
+        cell = notebook.cells[cell_index]
+        if cell.get("cell_type") != "code":
+            raise ValueError(f"cell {cell_index} is not a code cell")
+        cell.outputs = [NotebookNode(output) for output in outputs]
+        cell.execution_count = execution_count
+        self._write(path, notebook)
 
     def append_markdown_cell(self, path: Path, source: str) -> int:
         """Append a markdown cell and return its cell index."""

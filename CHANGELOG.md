@@ -5,6 +5,8 @@ Caveman style. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Notebook-backed `exec`, `exec --file`, `markdown`, and `snapshot` CLI paths.
+- Bounded execution summaries with output and traceback artifact handles.
 - Public DTO, port, service constructor, CLI signature, and MCP skeleton contracts.
 - Bootstrap `jupyter-workbench` package scaffold.
 

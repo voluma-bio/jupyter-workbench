@@ -52,8 +52,24 @@ class NotebookPort(Protocol):
         """Create an empty notebook at path."""
         ...
 
-    def append_code_cell(self, path: Path, source: str, outputs: list[dict[str, Any]]) -> int:
+    def append_code_cell(
+        self,
+        path: Path,
+        source: str,
+        outputs: list[dict[str, Any]],
+        metadata: dict[str, Any] | None = None,
+    ) -> int:
         """Append a code cell and return its cell index."""
+        ...
+
+    def update_code_cell_outputs(
+        self,
+        path: Path,
+        cell_index: int,
+        outputs: list[dict[str, Any]],
+        execution_count: int | None = None,
+    ) -> None:
+        """Update outputs for an existing code cell."""
         ...
 
     def append_markdown_cell(self, path: Path, source: str) -> int:

@@ -77,7 +77,35 @@ A new session creates:
 
 ## Execution
 
-Placeholder: execute inline code, execute `--file`, and append markdown into the active notebook.
+Execute inline Python in the persistent kernel and append it to `notebooks/active.ipynb` before execution:
+
+```bash
+jupyter-workbench exec --session-id review-1 "print('hello')"
+```
+
+Execute a Python file as one notebook-backed code cell. The cell source is the file contents and metadata records the source path:
+
+```bash
+jupyter-workbench exec --session-id review-1 --file analysis_step.py
+```
+
+Append markdown notes without rewriting prior cells:
+
+```bash
+jupyter-workbench markdown --session-id review-1 "## Review note\nUser asked for closer view."
+```
+
+If `--session-id` is omitted, execution commands target the most recent non-closed session under the root. Prefer explicit ids for multi-session work.
+
+Execution responses are bounded. Large outputs and tracebacks are written under `sessions/<session_id>/outputs/` and returned as artifact paths.
+
+Read the machine-readable session snapshot:
+
+```bash
+jupyter-workbench snapshot --session-id review-1
+```
+
+Snapshot reports kernel state, notebook path, cell count, recent execution summaries, artifact references, lineage pointer, and placeholder visualization fields.
 
 ## Visualization
 

@@ -50,3 +50,27 @@ jupyter-workbench status --root-dir /work/.jupyter-workbench review-1
 jupyter-workbench list --root-dir /work/.jupyter-workbench
 jupyter-workbench close --root-dir /work/.jupyter-workbench review-1
 ```
+
+
+## Execute notebook-backed work
+
+Use `exec` for compute-only and visualization setup work. Inline code and `--file` both append a code cell to the active notebook before execution and return the same structured result shape.
+
+```bash
+jupyter-workbench exec --session-id review-1 "print('ready')"
+jupyter-workbench exec --session-id review-1 --file step.py
+```
+
+Use `markdown` for durable notes:
+
+```bash
+jupyter-workbench markdown --session-id review-1 "## What changed"
+```
+
+Use `snapshot` as the canonical machine-readable read surface after mutations:
+
+```bash
+jupyter-workbench snapshot --session-id review-1
+```
+
+Large outputs stay bounded in command responses. Follow artifact paths under `sessions/<session_id>/outputs/` when full stdout, rich output, or tracebacks are needed.
