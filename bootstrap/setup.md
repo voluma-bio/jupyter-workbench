@@ -70,7 +70,6 @@ A new session creates:
       lineage.json
       notebooks/
         active.ipynb
-        revision_N.ipynb
       outputs/
       visualizations/
         manifests/
@@ -119,7 +118,21 @@ uv run --extra mcp jupyter-workbench-mcp
 uv run --extra mcp fastmcp run jupyter_workbench.mcp:mcp
 ```
 
-MCP tools are thin wrappers around the same core services as the CLI. They return the same DTO field semantics as JSON dictionaries and report missing sessions as `{"error": "..."}`. The MCP surface includes session, exec, markdown, snapshot, status, list, close, replay, lineage, derive, and compact operations.
+MCP tools are thin wrappers around the same core services as the CLI. They return the same DTO field semantics as JSON dictionaries. Errors propagate as MCP tool errors rather than returned `{"error": ...}` dictionaries.
+
+The MCP surface includes:
+
+- `open_session(session_id?, root_dir?)`
+- `exec_code(code?, session_id?, file?, root_dir?)`
+- `markdown(text, session_id?, root_dir?)`
+- `snapshot(session_id?, root_dir?)`
+- `status(session_id, root_dir?)`
+- `list_sessions(root_dir?)`
+- `close(session_id, root_dir?)`
+- `replay(session_id, root_dir?)`
+- `lineage(session_id, root_dir?)`
+- `derive(session_id, root_dir?)`
+- `compact(session_id, cells_to_remove?, root_dir?)`
 
 ## Cheap-agent cleanup workflow
 

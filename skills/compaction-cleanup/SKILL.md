@@ -35,7 +35,7 @@ Start from the durable lineage record:
 jupyter-workbench lineage <session-id>
 ```
 
-Read the reported `active_notebook`, `revisions`, derived notebooks, compacted notebooks, replay history, and `is_derived` state. The lineage tells you which notebook is current and which source notebooks must remain preserved.
+Read the `LineageInfo` fields: `session_id`, `source_notebook`, `derived_notebooks`, `revision_count`, `revisions`, `active_notebook`, and `is_derived`. The lineage tells you which notebook is current, which notebooks were derived, how many replay revisions exist, and which source notebook must remain preserved.
 
 Optionally inspect the snapshot for cell counts, recent execution summaries, output artifacts, screenshots, event summaries, and visualization status:
 
@@ -103,7 +103,7 @@ jupyter-workbench snapshot --session-id <session-id>
 Verify:
 
 - `active_notebook` points at the derived or compacted notebook,
-- the previous source notebook still exists on disk and remains referenced by lineage,
+- the previous `source_notebook` still exists on disk and remains referenced by lineage,
 - removed cells are recorded in compact metadata,
 - screenshots, output artifacts, event summaries, final parameters, and report cells remain referenced,
 - the cleanup result is understandable without replaying visualization.

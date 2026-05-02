@@ -6,8 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from jupyter_workbench.adapters.visualization.event_log import DurableEventLog
-from jupyter_workbench.core.interfaces import KernelPort, NotebookPort, VisualizationPort
+from jupyter_workbench.core.interfaces import EventLogPort, KernelPort, NotebookPort, VisualizationPort
 from jupyter_workbench.core.models import SnapshotResult
 from jupyter_workbench.core.session_service import SessionNotFoundError
 
@@ -21,11 +20,13 @@ class SnapshotService:
         kernel: KernelPort | None = None,
         root_dir: Path | None = None,
         visualization: VisualizationPort | None = None,
+        event_log: EventLogPort | None = None,
     ) -> None:
         self.notebook = notebook
         self.kernel = kernel
         self.root_dir = root_dir or Path(".jupyter-workbench")
         self.visualizations = visualization
+        self.event_log = event_log
 
     def snapshot(self, session_id: str | None = None) -> SnapshotResult:
         """Return a machine-readable snapshot for a session."""
@@ -87,7 +88,13 @@ class SnapshotService:
         return summary
 
     def _event_summary(self, session_id: str) -> dict[str, Any]:
-        events, cursor = DurableEventLog(self.root_dir, session_id).read(0)
+        if self.event_log is None:
+            return {
+                "recent_events": [],
+                "total_event_count": 0,
+                "cursor": 0,
+            }
+        events, cursor = self.event_log.for_session(session_id).read(0)
         return {
             "recent_events": events[-10:],
             "total_event_count": len(events),

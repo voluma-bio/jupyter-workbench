@@ -12,6 +12,7 @@ from rich.table import Table
 
 from jupyter_workbench.adapters.kernel.jupyter_client_manager import JupyterClientManager
 from jupyter_workbench.adapters.notebook.nbformat_store import NbformatStore
+from jupyter_workbench.adapters.visualization.event_log import DurableEventLog
 from jupyter_workbench.adapters.visualization.pyvista_trame import PyVistaTrameHelper
 
 from jupyter_workbench.core.execution_service import ExecutionService
@@ -58,6 +59,7 @@ def _snapshot_service(root_dir: Path) -> SnapshotService:
         notebook=notebook,
         root_dir=root_dir,
         visualization=PyVistaTrameHelper(root_dir),
+        event_log=DurableEventLog(root_dir),
     )
 
 

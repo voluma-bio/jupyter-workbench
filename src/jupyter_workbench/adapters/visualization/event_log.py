@@ -25,6 +25,10 @@ class DurableEventLog:
         self.path = self._event_path(session_id) if session_id is not None else None
         self._seq = count(self._highest_existing_seq() + 1)
 
+    def for_session(self, session_id: str) -> DurableEventLog:
+        """Return an event log bound to a session under the same root."""
+        return DurableEventLog(self.root_dir, session_id)
+
     def append(self, event_type: str, payload: dict[str, Any]) -> int:
         """Append an event and return its sequence number.
 

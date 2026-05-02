@@ -89,6 +89,10 @@ class VisualizationPort(Protocol):
 class EventLogPort(Protocol):
     """Port for durable visualization event logs."""
 
+    def for_session(self, session_id: str) -> EventLogPort:
+        """Return an event log bound to a session."""
+        ...
+
     def append(self, event_type: str, payload: dict[str, Any]) -> int:
         """Append an event and return its sequence number."""
         ...

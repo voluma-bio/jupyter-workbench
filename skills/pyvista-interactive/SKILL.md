@@ -35,7 +35,7 @@ The execution result should surface `visualization_delta` when trame display out
 jupyter-workbench snapshot --session-id review-1
 ```
 
-Read `visualization_status`, `visualization_summary.active_scene.browser_url`, `scene_revision`, `degraded_scenes`, `recovery_guidance`, and `screenshots`. These are persisted under:
+Read `visualization_status`, `visualization_summary.active_scene.browser_url`, `visualization_summary.scene_revision`, `visualization_summary.degraded_scenes`, `visualization_summary.recovery_guidance`, and `visualization_summary.screenshots`. These are persisted under:
 
 ```text
 .jupyter-workbench/sessions/review-1/visualizations/
@@ -49,7 +49,7 @@ A snapshot with `visualization_status: "visualization_degraded"` means the visua
 
 Recovery path:
 
-1. Read `visualization_summary.degraded_scenes` and `recovery_guidance`.
+1. Read `visualization_summary.degraded_scenes` and `visualization_summary.recovery_guidance`.
 2. Re-execute the scene setup cell/code through `jupyter-workbench exec --session-id <id> ...`.
 3. Confirm the next `exec` result has `visualization_delta.scene.status == "healthy"` or the next snapshot returns `visualization_status: "visualization_healthy"`.
 
@@ -127,4 +127,4 @@ print({'events': events, 'cursor': cursor, 'timed_out': timed_out})
 "
 ```
 
-Event records have `seq`, `ts`, `type`, and `payload`. Snapshot includes `event_summary.recent_events`, `total_event_count`, and the current end cursor.
+Event records have `seq`, `ts`, `type`, and `payload`. Snapshot includes `event_summary.recent_events`, `event_summary.total_event_count`, and `event_summary.cursor`.
