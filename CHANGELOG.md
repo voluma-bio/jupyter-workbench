@@ -5,6 +5,7 @@ Caveman style. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Cheap-agent compaction cleanup skill and bootstrap handoff workflow.
 - Detailed lineage inspection with full revision history, active notebook, and derived-state fields.
 - Derived and compacted notebook lineage operations across CLI, MCP, and public DTOs.
 - FastMCP adapter wrappers with CLI-equivalent DTO dictionary semantics.

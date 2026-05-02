@@ -119,7 +119,28 @@ uv run --extra mcp jupyter-workbench-mcp
 uv run --extra mcp fastmcp run jupyter_workbench.mcp:mcp
 ```
 
-MCP tools are thin wrappers around the same core services as the CLI. They return the same DTO field semantics as JSON dictionaries and report missing sessions as `{"error": "..."}`. The MCP surface currently includes session, exec, markdown, snapshot, status, list, close, replay, and lineage operations; derive and compact remain hidden until core implementations exist.
+MCP tools are thin wrappers around the same core services as the CLI. They return the same DTO field semantics as JSON dictionaries and report missing sessions as `{"error": "..."}`. The MCP surface includes session, exec, markdown, snapshot, status, list, close, replay, lineage, derive, and compact operations.
+
+## Cheap-agent cleanup workflow
+
+After an expensive analysis agent finishes notebook-backed work, hand the durable session to a cheap cleanup agent before final review. The expensive agent should preserve artifacts, optionally close live visualization resources, and provide the session id. The cleanup agent only needs the `jupyter-workbench` CLI and the `.jupyter-workbench/` durable root. It does not need PyVista, trame, a browser, or a live visualization kernel.
+
+Step-by-step cleanup:
+
+```bash
+jupyter-workbench lineage --session-id review-1
+jupyter-workbench derive --session-id review-1
+jupyter-workbench compact --session-id review-1
+jupyter-workbench snapshot --session-id review-1
+```
+
+Use lineage to understand the active notebook, revisions, derived notebooks, compacted notebooks, and source relationships. Use snapshot output to read recent execution summaries, screenshots, event summaries, visualization status, and artifact paths without running visualization code. If automatic compaction is too broad or too narrow, inspect the cells and compact specific dead-end cells instead:
+
+```bash
+jupyter-workbench compact --session-id review-1 -c 3 -c 5 -c 7
+```
+
+Cleanup must preserve the accepted analysis story: final parameters, artifact manifests, screenshot references, event evidence, correction explanations, and report cells. `derive` and `compact` write new notebook artifacts and leave source notebooks unchanged, so another agent can recover or compare the pre-cleanup notebook later.
 
 ## Visualization
 
