@@ -34,6 +34,8 @@ def _print_session(info: SessionInfo) -> None:
     table.add_row("kernel_status", info.kernel_status)
     table.add_row("visualization_status", info.visualization_status)
     table.add_row("created_at", info.created_at)
+    if info.warning:
+        table.add_row("warning", info.warning)
     console.print(table)
 
 

@@ -36,8 +36,12 @@ class KernelPort(Protocol):
         """Return whether a session kernel is reachable."""
         ...
 
-    def shutdown(self, session_id: str) -> None:
-        """Stop a session kernel if it is running."""
+    def probe_alive(self, session_id: str) -> bool:
+        """Probe kernel reachability without retaining client state."""
+        ...
+
+    def shutdown(self, session_id: str) -> bool:
+        """Stop a session kernel if it is running; return whether it stopped."""
         ...
 
 

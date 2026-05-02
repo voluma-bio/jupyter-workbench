@@ -108,20 +108,28 @@ class JupyterClientManager:
                     return True
             except Exception:
                 pass
+        return self.probe_alive(session_id)
 
+    def probe_alive(self, session_id: str) -> bool:
+        """Probe kernel reachability without retaining persistent client state."""
         connection_file = self._connection_file(session_id)
         if not connection_file.exists():
             return False
+        client = BlockingKernelClient(connection_file=str(connection_file))
         try:
-            client = self._clients.get(session_id)
-            if client is None:
-                self.connect(session_id, str(connection_file))
-                client = self._clients[session_id]
+            client.load_connection_file(str(connection_file))
+            client.start_channels(iopub=False, stdin=False, control=False)
+            client.wait_for_ready(timeout=min(self.timeout_seconds, 2.0))
             return bool(client.is_alive())
         except Exception:
             return False
+        finally:
+            try:
+                client.stop_channels()
+            except Exception:
+                pass
 
-    def shutdown(self, session_id: str) -> None:
+    def shutdown(self, session_id: str) -> bool:
         """Stop a session kernel if it is running."""
         client = self._clients.pop(session_id, None)
         manager = self._managers.pop(session_id, None)
@@ -135,8 +143,9 @@ class JupyterClientManager:
                 connection_file = self._connection_file(session_id)
                 if connection_file.exists():
                     try:
-                        self.connect(session_id, str(connection_file))
-                        client = self._clients.pop(session_id)
+                        client = BlockingKernelClient(connection_file=str(connection_file))
+                        client.load_connection_file(str(connection_file))
+                        client.start_channels(shell=False, iopub=False, stdin=False, hb=False)
                     except Exception:
                         client = None
             if client is not None:
@@ -149,6 +158,7 @@ class JupyterClientManager:
                 client.stop_channels()
             except Exception:
                 pass
+        return not self.probe_alive(session_id)
 
     def _connection_file(self, session_id: str) -> Path:
         return self.root_dir / "sessions" / session_id / "kernel.json"

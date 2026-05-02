@@ -36,34 +36,54 @@ class SessionService:
         manifest_path = self._manifest_path(resolved_session_id)
         if manifest_path.exists():
             manifest = self._read_manifest(resolved_session_id)
+            manifest_status = str(manifest.get("status", "active"))
+            if manifest_status == "closed":
+                return self._start_existing_session(resolved_session_id, manifest)
+            if manifest_status in {"close_failed", "creating", "create_failed"}:
+                self.kernel.shutdown(resolved_session_id)
+                return self._start_existing_session(resolved_session_id, manifest)
             if self._is_kernel_alive(resolved_session_id):
+                manifest["status"] = "active"
                 return self._info_from_manifest(manifest, "active")
+            manifest["status"] = "kernel_degraded"
             return self._info_from_manifest(manifest, "kernel_degraded")
 
         session_dir = self._session_dir(resolved_session_id)
         notebook_path = session_dir / "notebooks" / "active.ipynb"
         self._create_layout(session_dir)
         self.notebook.create(notebook_path)
-        self.kernel.start(resolved_session_id)
-
         manifest = {
             "session_id": resolved_session_id,
             "root_dir": str(self.root_dir),
             "notebook_path": self._relative_to_root(notebook_path),
             "created_at": self._now(),
-            "status": "active",
+            "status": "creating",
             "visualization_status": "visualization_absent",
         }
+        self._write_manifest(resolved_session_id, manifest)
+        try:
+            self.kernel.start(resolved_session_id)
+        except Exception:
+            manifest["status"] = "create_failed"
+            self._write_manifest(resolved_session_id, manifest)
+            self.kernel.shutdown(resolved_session_id)
+            raise
+        manifest["status"] = "active"
         self._write_manifest(resolved_session_id, manifest)
         return self._info_from_manifest(manifest, "active")
 
     def close(self, session_id: str) -> SessionInfo:
         """Close live resources for a session while preserving artifacts."""
         manifest = self._read_manifest(session_id)
-        self.kernel.shutdown(session_id)
-        manifest["status"] = "closed"
+        shutdown_succeeded = self.kernel.shutdown(session_id)
+        if shutdown_succeeded:
+            manifest["status"] = "closed"
+            warning = None
+        else:
+            manifest["status"] = "close_failed"
+            warning = "kernel shutdown failed; session resources may still be running"
         self._write_manifest(session_id, manifest)
-        return self._info_from_manifest(manifest, "closed")
+        return self._info_from_manifest(manifest, str(manifest["status"]), warning=warning)
 
     def status(self, session_id: str) -> SessionInfo:
         """Return status for one session."""
@@ -71,6 +91,8 @@ class SessionService:
         manifest_status = str(manifest.get("status", "active"))
         if manifest_status == "closed":
             kernel_status = "closed"
+        elif manifest_status in {"creating", "create_failed"}:
+            kernel_status = manifest_status
         elif self._is_kernel_alive(session_id):
             kernel_status = "active"
         else:
@@ -102,6 +124,21 @@ class SessionService:
     def _manifest_path(self, session_id: str) -> Path:
         return self._session_dir(session_id) / "manifest.json"
 
+    def _start_existing_session(self, session_id: str, manifest: dict[str, Any]) -> SessionInfo:
+        """Start a fresh kernel for a session with an existing manifest."""
+        manifest["status"] = "creating"
+        self._write_manifest(session_id, manifest)
+        try:
+            self.kernel.start(session_id)
+        except Exception:
+            manifest["status"] = "create_failed"
+            self._write_manifest(session_id, manifest)
+            self.kernel.shutdown(session_id)
+            raise
+        manifest["status"] = "active"
+        self._write_manifest(session_id, manifest)
+        return self._info_from_manifest(manifest, "active")
+
     def _read_manifest(self, session_id: str) -> dict[str, Any]:
         manifest_path = self._manifest_path(session_id)
         if not manifest_path.exists():
@@ -115,7 +152,12 @@ class SessionService:
         tmp_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         tmp_path.replace(manifest_path)
 
-    def _info_from_manifest(self, manifest: dict[str, Any], kernel_status: str) -> SessionInfo:
+    def _info_from_manifest(
+        self,
+        manifest: dict[str, Any],
+        kernel_status: str,
+        warning: str | None = None,
+    ) -> SessionInfo:
         return SessionInfo(
             session_id=str(manifest["session_id"]),
             root_dir=str(manifest.get("root_dir", self.root_dir)),
@@ -123,11 +165,12 @@ class SessionService:
             kernel_status=kernel_status,
             visualization_status=str(manifest.get("visualization_status", "visualization_absent")),
             created_at=str(manifest["created_at"]),
+            warning=warning,
         )
 
     def _is_kernel_alive(self, session_id: str) -> bool:
         try:
-            return self.kernel.is_alive(session_id)
+            return self.kernel.probe_alive(session_id)
         except Exception:
             return False
 
@@ -141,6 +184,6 @@ class SessionService:
         return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def session_info_dict(info: SessionInfo) -> dict[str, str]:
+def session_info_dict(info: SessionInfo) -> dict[str, Any]:
     """Return a serializable representation of a session DTO."""
     return asdict(info)

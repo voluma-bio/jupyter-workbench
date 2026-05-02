@@ -16,6 +16,7 @@ class SessionInfo:
     kernel_status: str
     visualization_status: str
     created_at: str
+    warning: str | None = None
 
 
 @dataclass(frozen=True)
