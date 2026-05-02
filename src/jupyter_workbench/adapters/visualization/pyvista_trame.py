@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import time
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
@@ -97,7 +98,11 @@ class PyVistaTrameHelper:
             except Exception as exc:
                 LOGGER.warning("failed to record slider event for %s: %s", session_id, exc)
 
-        return plotter.add_slider_widget(callback, rng=rng, title=label)
+        try:
+            return plotter.add_slider_widget(callback, rng=rng, title=label)
+        except Exception as exc:
+            warnings.warn(f"failed to register slider callback for {session_id}: {exc}", stacklevel=2)
+            return None
 
     def register_key_callback(self, session_id: str, plotter: Any, event_log: EventLogPort, keys: list[str] | None = None) -> None:
         """Register durable key logging using a generic VTK key observer."""
@@ -172,7 +177,7 @@ class PyVistaTrameHelper:
         manifest = self._read_scene(session_id, viz_id)
         if not manifest:
             manifest = {"viz_id": viz_id, "browser_url": None, "status": "healthy"}
-        manifest["scene_revision"] = int(manifest.get("scene_revision", 0)) + 1
+        manifest["scene_revision"] = int(manifest.get("scene_revision", -1)) + 1
         manifest["updated_at"] = self._now()
         self._write_scene(session_id, viz_id, manifest)
         return manifest

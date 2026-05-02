@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import warnings
 from datetime import datetime, timezone
 from itertools import count
 from pathlib import Path
@@ -22,6 +23,10 @@ class DurableEventLog:
         self._seq = count(self._highest_existing_seq() + 1)
 
     def append(self, event_type: str, payload: dict[str, Any]) -> int:
+        """Append an event and return its sequence number.
+
+        Returns -1 when the event was not durably persisted.
+        """
         seq = next(self._seq)
         try:
             path = self._require_path()
@@ -30,8 +35,9 @@ class DurableEventLog:
             with path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, sort_keys=True) + "\n")
                 handle.flush()
-        except Exception:
-            pass
+        except Exception as exc:
+            warnings.warn(f"failed to append durable event log record: {exc}", stacklevel=2)
+            return -1
         return seq
 
     def read(self, cursor: int = 0) -> tuple[list[dict[str, Any]], int]:
@@ -90,7 +96,11 @@ class DurableEventLog:
                     except json.JSONDecodeError:
                         continue
                     if isinstance(data, dict):
-                        highest = max(highest, int(data.get("seq", -1)))
+                        try:
+                            seq = int(data.get("seq", -1))
+                        except (TypeError, ValueError):
+                            continue
+                        highest = max(highest, seq)
             return highest
         except Exception:
             return -1
