@@ -20,6 +20,9 @@ Caveman style. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Bootstrap `jupyter-workbench` package scaffold.
 
 ### Changed
+- Event log append now file-locked, fsynced, and cursor-safe across partial trailing records.
+- Kernel lifecycle now resets visualization status to absent on close, reopen, and replay restart.
+- MCP tools now propagate missing-session errors through FastMCP instead of inline error dicts.
 - Scene registration now increments stable scene revision metadata on updates.
 - Replay failure now shuts down contaminated kernels, preserves `replay_failed` status, and removes orphan revision backups.
 - Session close now reports failed shutdowns instead of hiding live kernels.

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import warnings
 from datetime import datetime, timezone
 from itertools import count
 from pathlib import Path
 from typing import Any
+
+from filelock import FileLock
 
 POLL_INTERVAL_SECONDS = 0.5
 
@@ -27,18 +30,25 @@ class DurableEventLog:
 
         Returns -1 when the event was not durably persisted.
         """
-        seq = next(self._seq)
         try:
             path = self._require_path()
             path.parent.mkdir(parents=True, exist_ok=True)
-            record = {"seq": seq, "ts": self._now(), "type": event_type, "payload": payload}
-            with path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(record, sort_keys=True) + "\n")
-                handle.flush()
+            with FileLock(str(self._lock_path())):
+                disk_seq = self._highest_existing_seq()
+                seq = max(next(self._seq), disk_seq + 1)
+                self._seq = count(seq + 1)
+                self._append_record(path, seq, event_type, payload)
         except Exception as exc:
             warnings.warn(f"failed to append durable event log record: {exc}", stacklevel=2)
             return -1
         return seq
+
+    def _append_record(self, path: Path, seq: int, event_type: str, payload: dict[str, Any]) -> None:
+        with path.open("a", encoding="utf-8") as handle:
+            record = {"seq": seq, "ts": self._now(), "type": event_type, "payload": payload}
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
 
     def read(self, cursor: int = 0) -> tuple[list[dict[str, Any]], int]:
         try:
@@ -47,16 +57,18 @@ class DurableEventLog:
                 return [], 0
             start = max(cursor, 0)
             events: list[dict[str, Any]] = []
-            with path.open("r", encoding="utf-8") as handle:
+            last_good_offset = start
+            with path.open("rb") as handle:
                 handle.seek(start)
                 for line in handle:
                     try:
-                        data = json.loads(line)
-                    except json.JSONDecodeError:
+                        data = json.loads(line.decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError):
                         continue
                     if isinstance(data, dict):
                         events.append(data)
-                return events, handle.tell()
+                        last_good_offset = handle.tell()
+                return events, last_good_offset
         except Exception:
             return [], max(cursor, 0)
 
@@ -77,6 +89,10 @@ class DurableEventLog:
         if session_id is None:
             raise ValueError("session_id is required")
         return self.root_dir / "sessions" / session_id / "events.jsonl"
+
+    def _lock_path(self) -> Path:
+        path = self._require_path()
+        return path.parent / "events.lock"
 
     def _require_path(self) -> Path:
         if self.path is None:

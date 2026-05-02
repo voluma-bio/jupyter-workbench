@@ -16,7 +16,7 @@ from jupyter_workbench.adapters.notebook.nbformat_store import NbformatStore
 from jupyter_workbench.adapters.visualization.pyvista_trame import PyVistaTrameHelper
 from jupyter_workbench.core.execution_service import ExecutionService
 from jupyter_workbench.core.lineage_service import LineageService
-from jupyter_workbench.core.session_service import SessionNotFoundError, SessionService
+from jupyter_workbench.core.session_service import SessionService
 from jupyter_workbench.core.snapshot_service import SnapshotService
 
 mcp = FastMCP("jupyter-workbench")
@@ -56,10 +56,6 @@ def _lineage_service(root_dir: Path) -> LineageService:
     return LineageService(kernel=kernel, notebook=notebook, root_dir=root_dir)
 
 
-def _error(error: SessionNotFoundError) -> dict[str, str]:
-    return {"error": str(error)}
-
-
 @mcp.tool
 def open_session(session_id: str | None = None, root_dir: str = ".jupyter-workbench") -> dict[str, Any]:
     """Open or attach to a workbench session."""
@@ -74,15 +70,12 @@ def exec_code(
     root_dir: str = ".jupyter-workbench",
 ) -> dict[str, Any]:
     """Execute code in a workbench session."""
-    try:
-        result = _execution_service(Path(root_dir)).exec_code(
-            code,
-            session_id=session_id,
-            file=Path(file) if file is not None else None,
-        )
-        return asdict(result)
-    except SessionNotFoundError as error:
-        return _error(error)
+    result = _execution_service(Path(root_dir)).exec_code(
+        code,
+        session_id=session_id,
+        file=Path(file) if file is not None else None,
+    )
+    return asdict(result)
 
 
 @mcp.tool
@@ -92,10 +85,7 @@ def markdown(
     root_dir: str = ".jupyter-workbench",
 ) -> dict[str, Any]:
     """Append markdown to a session notebook."""
-    try:
-        return asdict(_execution_service(Path(root_dir)).markdown(text, session_id=session_id))
-    except SessionNotFoundError as error:
-        return _error(error)
+    return asdict(_execution_service(Path(root_dir)).markdown(text, session_id=session_id))
 
 
 @mcp.tool
@@ -104,19 +94,13 @@ def snapshot(
     root_dir: str = ".jupyter-workbench",
 ) -> dict[str, Any]:
     """Report a machine-readable session snapshot."""
-    try:
-        return asdict(_snapshot_service(Path(root_dir)).snapshot(session_id))
-    except SessionNotFoundError as error:
-        return _error(error)
+    return asdict(_snapshot_service(Path(root_dir)).snapshot(session_id))
 
 
 @mcp.tool
 def status(session_id: str, root_dir: str = ".jupyter-workbench") -> dict[str, Any]:
     """Report one session status."""
-    try:
-        return asdict(_service(Path(root_dir)).status(session_id))
-    except SessionNotFoundError as error:
-        return _error(error)
+    return asdict(_service(Path(root_dir)).status(session_id))
 
 
 @mcp.tool
@@ -128,28 +112,19 @@ def list_sessions(root_dir: str = ".jupyter-workbench") -> dict[str, Any]:
 @mcp.tool
 def close(session_id: str, root_dir: str = ".jupyter-workbench") -> dict[str, Any]:
     """Close a workbench session while preserving artifacts."""
-    try:
-        return asdict(_service(Path(root_dir)).close(session_id))
-    except SessionNotFoundError as error:
-        return _error(error)
+    return asdict(_service(Path(root_dir)).close(session_id))
 
 
 @mcp.tool
 def replay(session_id: str, root_dir: str = ".jupyter-workbench") -> dict[str, Any]:
     """Replay notebook lineage into a fresh runtime."""
-    try:
-        return asdict(_lineage_service(Path(root_dir)).replay(session_id))
-    except SessionNotFoundError as error:
-        return _error(error)
+    return asdict(_lineage_service(Path(root_dir)).replay(session_id))
 
 
 @mcp.tool
 def lineage(session_id: str, root_dir: str = ".jupyter-workbench") -> dict[str, Any]:
     """Inspect notebook lineage."""
-    try:
-        return asdict(_lineage_service(Path(root_dir)).lineage(session_id))
-    except SessionNotFoundError as error:
-        return _error(error)
+    return asdict(_lineage_service(Path(root_dir)).lineage(session_id))
 
 
 def main() -> None:

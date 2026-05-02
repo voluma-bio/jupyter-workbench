@@ -70,6 +70,7 @@ class LineageService:
                 artifact = self._write_replay_error(session_id, -1, str(error))
                 revision_path.unlink(missing_ok=True)
                 manifest["status"] = "replay_failed"
+                manifest["visualization_status"] = "visualization_absent"
                 self._write_manifest(session_id, manifest)
                 return ReplayResult(
                     session_id=session_id,
@@ -78,6 +79,7 @@ class LineageService:
                     failed_cell=None,
                     error_artifact=artifact,
                 )
+            manifest["visualization_status"] = "visualization_absent"
             self.notebook.clear_code_outputs(notebook_path)
 
             executor = ExecutionService(
@@ -103,6 +105,7 @@ class LineageService:
                     revision_path.unlink(missing_ok=True)
                     self.kernel.shutdown(session_id)
                     manifest["status"] = "replay_failed"
+                    manifest["visualization_status"] = "visualization_absent"
                     self._write_manifest(session_id, manifest)
                     return ReplayResult(
                         session_id=session_id,

@@ -95,6 +95,7 @@ class SessionService:
             else:
                 manifest["status"] = "close_failed"
                 warning = "kernel shutdown failed; session resources may still be running"
+            manifest["visualization_status"] = "visualization_absent"
             self._write_manifest(session_id, manifest)
             return self._info_from_manifest(manifest, str(manifest["status"]), warning=warning)
 
@@ -140,6 +141,7 @@ class SessionService:
     def _start_existing_session(self, session_id: str, manifest: dict[str, Any]) -> SessionInfo:
         """Start a fresh kernel for a session with an existing manifest."""
         manifest["status"] = "creating"
+        manifest["visualization_status"] = "visualization_absent"
         self._write_manifest(session_id, manifest)
         try:
             self.kernel.start(session_id)
