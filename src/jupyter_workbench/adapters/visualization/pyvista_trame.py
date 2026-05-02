@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+
+from jupyter_workbench.core.interfaces import EventLogPort
 from uuid import uuid4
 
 URL_PATTERN = re.compile(r"https?://[^\s'\"<>]+")
 TRAME_MARKERS = ("trame", "wslink", "vtk", "pyvista", "jupyter-server-proxy")
+LOGGER = logging.getLogger(__name__)
 
 
 class PyVistaTrameHelper:
@@ -31,7 +36,7 @@ class PyVistaTrameHelper:
         manifest = {
             "viz_id": resolved_viz_id,
             "browser_url": plotter_info.get("browser_url") or existing.get("browser_url"),
-            "scene_revision": int(existing.get("scene_revision", 0)),
+            "scene_revision": int(existing.get("scene_revision", -1)) + 1,
             "status": plotter_info.get("status") or "healthy",
             "updated_at": self._now(),
         }
@@ -40,6 +45,120 @@ class PyVistaTrameHelper:
                 manifest[key] = value
         self._write_scene(session_id, resolved_viz_id, manifest)
         return manifest
+
+    def register_pick_callback(self, session_id: str, plotter: Any, event_log: EventLogPort) -> None:
+        """Register durable point and cell picking callbacks for a plotter."""
+
+        def point_callback(point: Any, picker: Any | None = None) -> None:
+            try:
+                payload: dict[str, Any] = {"point": self._as_float_list(point)}
+                point_id = self._picker_point_id(picker)
+                if point_id is not None:
+                    payload["point_id"] = point_id
+                event_log.append("pick.point", payload)
+            except Exception as exc:
+                LOGGER.warning("failed to record point-pick event for %s: %s", session_id, exc)
+
+        try:
+            plotter.enable_point_picking(callback=point_callback, use_picker=True, show_message=False)
+        except Exception as exc:
+            LOGGER.warning("failed to register point-pick callback for %s: %s", session_id, exc)
+
+        def cell_callback(mesh: Any) -> None:
+            try:
+                blocks = self._extract_cell_blocks(mesh)
+                event_log.append("pick.cells", {"blocks": blocks})
+            except Exception as exc:
+                LOGGER.warning("failed to record cell-pick event for %s: %s", session_id, exc)
+
+        try:
+            plotter.enable_cell_picking(callback=cell_callback, through=False, show_message=False)
+        except Exception as exc:
+            LOGGER.warning("failed to register cell-pick callback for %s: %s", session_id, exc)
+
+    def register_slider_callback(
+        self,
+        session_id: str,
+        plotter: Any,
+        event_log: EventLogPort,
+        rng: tuple[float, float],
+        label: str,
+    ) -> Any:
+        """Register a slider callback that skips PyVista's initial creation fire."""
+        seen_initial = False
+
+        def callback(value: Any) -> None:
+            nonlocal seen_initial
+            if not seen_initial:
+                seen_initial = True
+                return
+            try:
+                event_log.append("widget.slider", {"value": float(value), "label": label})
+            except Exception as exc:
+                LOGGER.warning("failed to record slider event for %s: %s", session_id, exc)
+
+        return plotter.add_slider_widget(callback, rng=rng, title=label)
+
+    def register_key_callback(self, session_id: str, plotter: Any, event_log: EventLogPort, keys: list[str] | None = None) -> None:
+        """Register durable key logging using a generic VTK key observer."""
+
+        def callback(obj: Any, _event: Any) -> None:
+            try:
+                key = obj.GetKeySym() if hasattr(obj, "GetKeySym") else None
+                if key is None or (keys is not None and key not in keys):
+                    return
+                event_log.append("key", {"key": str(key)})
+            except Exception as exc:
+                LOGGER.warning("failed to record key event for %s: %s", session_id, exc)
+
+        try:
+            interactor = getattr(plotter, "iren", None) or getattr(plotter, "interactor", None)
+            if interactor is None:
+                return
+            if hasattr(interactor, "add_observer"):
+                interactor.add_observer("KeyPressEvent", callback)
+            elif hasattr(interactor, "AddObserver"):
+                interactor.AddObserver("KeyPressEvent", callback)
+        except Exception as exc:
+            LOGGER.warning("failed to register key callback for %s: %s", session_id, exc)
+
+    def register_camera_callback(
+        self,
+        session_id: str,
+        plotter: Any,
+        event_log: EventLogPort,
+        throttle_ms: int = 500,
+    ) -> None:
+        """Register throttled camera ModifiedEvent logging."""
+        last_emit = 0.0
+        last_payload: dict[str, Any] | None = None
+
+        def callback(_obj: Any, _event: Any) -> None:
+            nonlocal last_emit, last_payload
+            try:
+                camera = getattr(plotter, "camera", None)
+                if camera is None:
+                    return
+                payload = {
+                    "position": self._as_float_list(camera.GetPosition()),
+                    "focal_point": self._as_float_list(camera.GetFocalPoint()),
+                    "view_up": self._as_float_list(camera.GetViewUp()),
+                }
+                now = time.monotonic()
+                if payload == last_payload or now - last_emit < throttle_ms / 1000:
+                    return
+                last_payload = payload
+                last_emit = now
+                event_log.append("camera.modified", payload)
+            except Exception as exc:
+                LOGGER.warning("failed to record camera event for %s: %s", session_id, exc)
+
+        try:
+            camera = getattr(plotter, "camera", None)
+            if camera is not None and hasattr(camera, "AddObserver"):
+                camera.AddObserver("ModifiedEvent", callback)
+        except Exception as exc:
+            LOGGER.warning("failed to register camera callback for %s: %s", session_id, exc)
 
     def get_active_scene(self, session_id: str) -> dict[str, Any] | None:
         """Return the most recently updated non-absent scene for a session."""
@@ -95,6 +214,53 @@ class PyVistaTrameHelper:
         if not screenshots_dir.exists():
             return []
         return [str(path) for path in sorted(screenshots_dir.glob("*.png"))]
+
+    def _as_float_list(self, value: Any) -> list[float]:
+        try:
+            return [float(item) for item in value]
+        except TypeError:
+            return [float(value)]
+
+    def _picker_point_id(self, picker: Any | None) -> int | None:
+        if picker is None:
+            return None
+        for name in ("GetPointId", "point_id"):
+            attr = getattr(picker, name, None)
+            if attr is None:
+                continue
+            value = attr() if callable(attr) else attr
+            try:
+                point_id = int(cast(Any, value))
+                if point_id >= 0:
+                    return point_id
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    def _extract_cell_blocks(self, mesh: Any) -> list[dict[str, Any]]:
+        blocks: list[dict[str, Any]] = []
+        if hasattr(mesh, "items"):
+            items = list(mesh.items())
+        else:
+            items = [(0, mesh)]
+        for block_index, block in items:
+            cell_ids = self._original_cell_ids(block)
+            try:
+                resolved_block_index = int(block_index)
+            except (TypeError, ValueError):
+                resolved_block_index = len(blocks)
+            blocks.append({"block_index": resolved_block_index, "original_cell_ids": cell_ids})
+        return blocks
+
+    def _original_cell_ids(self, block: Any) -> list[int]:
+        ids = None
+        try:
+            ids = block.cell_data.get("vtkOriginalCellIds") or block.cell_data.get("original_cell_ids")
+        except Exception:
+            ids = None
+        if ids is None:
+            return []
+        return [int(value) for value in list(ids)]
 
     def _manifests_dir(self, session_id: str) -> Path:
         return self.root_dir / "sessions" / session_id / "visualizations" / "manifests"

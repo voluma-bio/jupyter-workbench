@@ -151,6 +151,35 @@ print(shot)
 
 Screenshots are written under `sessions/<session_id>/visualizations/screenshots/` and appear in later snapshots. If the helper cannot find a plotter, pass the live plotter explicitly as `plotter=plotter`.
 
+Register durable interaction callbacks from the same persistent kernel when agents need to observe user scene manipulations:
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+from jupyter_workbench.adapters.visualization.event_log import DurableEventLog
+from jupyter_workbench.adapters.visualization.pyvista_trame import PyVistaTrameHelper
+
+events = DurableEventLog('.jupyter-workbench', 'review-1')
+viz = PyVistaTrameHelper('.jupyter-workbench')
+viz.register_pick_callback('review-1', plotter, events)
+viz.register_slider_callback('review-1', plotter, events, (0.0, 10.0), 'threshold')
+viz.register_key_callback('review-1', plotter, events)
+viz.register_camera_callback('review-1', plotter, events)
+"
+```
+
+Read or wait on events with caller-managed byte cursors:
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+records, cursor = events.read(cursor=0)
+print({'events': records, 'cursor': cursor})
+records, cursor, timed_out = events.wait(cursor, timeout=10.0)
+print({'events': records, 'cursor': cursor, 'timed_out': timed_out})
+"
+```
+
+Event records append to `sessions/<session_id>/events.jsonl` as typed JSONL entries. Later snapshots include an `event_summary` with recent events, total count, and current cursor.
+
 ## Recovery and lineage
 
 Inspect lineage without touching the live kernel:

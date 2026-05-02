@@ -73,6 +73,26 @@ class VisualizationPort(Protocol):
         """Return screenshot artifact paths for a session."""
         ...
 
+    def update_scene_revision(self, session_id: str, viz_id: str) -> dict[str, Any]:
+        """Increment and persist scene revision metadata."""
+        ...
+
+
+class EventLogPort(Protocol):
+    """Port for durable visualization event logs."""
+
+    def append(self, event_type: str, payload: dict[str, Any]) -> int:
+        """Append an event and return its sequence number."""
+        ...
+
+    def read(self, cursor: int = 0) -> tuple[list[dict[str, Any]], int]:
+        """Read events from a caller-managed byte cursor."""
+        ...
+
+    def wait(self, cursor: int, timeout: float = 30.0) -> tuple[list[dict[str, Any]], int, bool]:
+        """Wait for events or timeout."""
+        ...
+
 
 class NotebookPort(Protocol):
     """Port for durable notebook storage."""

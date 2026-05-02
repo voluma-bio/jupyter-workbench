@@ -50,6 +50,26 @@ class NotebookMutationResult:
 
 
 @dataclass(frozen=True)
+class EventRecord:
+    """Durable visualization interaction event."""
+
+    seq: int
+    ts: str
+    type: str
+    payload: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class EventPollResult:
+    """Result of reading or waiting on visualization events."""
+
+    session_id: str
+    events: list[EventRecord]
+    cursor: int
+    timed_out: bool
+
+
+@dataclass(frozen=True)
 class SnapshotResult:
     """Machine-readable observation of a session."""
 
@@ -62,6 +82,7 @@ class SnapshotResult:
     recent_outputs: list[dict[str, Any]]
     visualization_summary: dict[str, Any] | None
     lineage_summary: dict[str, Any] | None
+    event_summary: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

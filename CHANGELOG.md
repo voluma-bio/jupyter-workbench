@@ -5,6 +5,9 @@ Caveman style. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Durable visualization JSONL event log with caller-managed cursors and wait helper.
+- PyVista interaction callback helpers for pick, slider, key, and camera events.
+- Snapshot event summaries and active scene revision exposure.
 - Explicit `replay` and `lineage` CLI/service paths with replay revision metadata.
 - Per-session mutation lock for notebook-affecting session, execution, and replay operations.
 - PyVista/trame visualization manifest tracking and screenshot helper flow.
@@ -15,6 +18,7 @@ Caveman style. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Bootstrap `jupyter-workbench` package scaffold.
 
 ### Changed
+- Scene registration now increments stable scene revision metadata on updates.
 - Replay failure now shuts down contaminated kernels, preserves `replay_failed` status, and removes orphan revision backups.
 - Session close now reports failed shutdowns instead of hiding live kernels.
 - Session open now reopens closed/create-failed sessions with crash-safe manifests.

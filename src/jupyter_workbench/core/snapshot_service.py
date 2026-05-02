@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from jupyter_workbench.adapters.visualization.event_log import DurableEventLog
 from jupyter_workbench.core.interfaces import KernelPort, NotebookPort, VisualizationPort
 from jupyter_workbench.core.models import SnapshotResult
 from jupyter_workbench.core.session_service import SessionNotFoundError
@@ -47,6 +48,7 @@ class SnapshotService:
                 "revision": manifest.get("notebook_revision", 0),
                 "source_notebook": str(notebook_path),
             },
+            event_summary=self._event_summary(resolved_session_id),
         )
 
 
@@ -68,6 +70,15 @@ class SnapshotService:
             "active_scene": active,
             "items": scenes,
             "screenshots": screenshots,
+            "scene_revision": active.get("scene_revision") if active else None,
+        }
+
+    def _event_summary(self, session_id: str) -> dict[str, Any]:
+        events, cursor = DurableEventLog(self.root_dir, session_id).read(0)
+        return {
+            "recent_events": events[-10:],
+            "total_event_count": len(events),
+            "cursor": cursor,
         }
 
     def _recent_outputs(self, cells: list[dict[str, Any]], start_index: int) -> list[dict[str, Any]]:

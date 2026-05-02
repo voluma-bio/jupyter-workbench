@@ -79,4 +79,40 @@ Repeat this loop for human-in-the-loop work:
 4. Agent captures screenshots or polls event helpers when available.
 5. Agent explains what changed and why in plain language before applying another `exec` update.
 
-For v0, event callbacks are a pattern taught by the skill, not a full durable event API. Use caller-managed cursors when adding local event helpers so one consumer does not steal another consumer's events.
+## Durable interaction events
+
+Use `DurableEventLog` in notebook-executed code when the user needs to manipulate a live scene and have agents observe typed events later. The log lives at `sessions/<session_id>/events.jsonl`; cursors are byte offsets owned by each caller. One consumer reading events does not advance another consumer.
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+from jupyter_workbench.adapters.visualization.event_log import DurableEventLog
+from jupyter_workbench.adapters.visualization.pyvista_trame import PyVistaTrameHelper
+
+events = DurableEventLog('.jupyter-workbench', 'review-1')
+viz = PyVistaTrameHelper('.jupyter-workbench')
+viz.register_pick_callback('review-1', plotter, events)
+viz.register_slider_callback('review-1', plotter, events, (0.0, 10.0), 'threshold')
+viz.register_key_callback('review-1', plotter, events)
+viz.register_camera_callback('review-1', plotter, events)
+"
+```
+
+Poll from a caller-managed cursor:
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+events, cursor = events.read(cursor=0)
+print({'events': events, 'cursor': cursor})
+"
+```
+
+Wait for a new interaction with an explicit timeout:
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+events, cursor, timed_out = events.wait(cursor, timeout=10.0)
+print({'events': events, 'cursor': cursor, 'timed_out': timed_out})
+"
+```
+
+Event records have `seq`, `ts`, `type`, and `payload`. Snapshot includes `event_summary.recent_events`, `total_event_count`, and the current end cursor.
