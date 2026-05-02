@@ -41,7 +41,7 @@ class SessionService:
             manifest_status = str(manifest.get("status", "active"))
             if manifest_status == "closed":
                 return self._start_existing_session(resolved_session_id, manifest)
-            if manifest_status in {"close_failed", "creating", "create_failed"}:
+            if manifest_status in {"close_failed", "creating", "create_failed", "replay_failed"}:
                 self.kernel.shutdown(resolved_session_id)
                 return self._start_existing_session(resolved_session_id, manifest)
             if self._is_kernel_alive(resolved_session_id):
@@ -104,7 +104,7 @@ class SessionService:
         manifest_status = str(manifest.get("status", "active"))
         if manifest_status == "closed":
             kernel_status = "closed"
-        elif manifest_status in {"creating", "create_failed"}:
+        elif manifest_status in {"creating", "create_failed", "replay_failed"}:
             kernel_status = manifest_status
         elif self._is_kernel_alive(session_id):
             kernel_status = "active"

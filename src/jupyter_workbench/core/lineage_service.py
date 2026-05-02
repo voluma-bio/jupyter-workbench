@@ -68,6 +68,7 @@ class LineageService:
                 self.kernel.start(session_id)
             except Exception as error:
                 artifact = self._write_replay_error(session_id, -1, str(error))
+                revision_path.unlink(missing_ok=True)
                 manifest["status"] = "replay_failed"
                 self._write_manifest(session_id, manifest)
                 return ReplayResult(
@@ -99,6 +100,8 @@ class LineageService:
                 if execution.error:
                     artifact = self._write_replay_error(session_id, cell_index, execution.error)
                     shutil.copy2(revision_path, notebook_path)
+                    revision_path.unlink(missing_ok=True)
+                    self.kernel.shutdown(session_id)
                     manifest["status"] = "replay_failed"
                     self._write_manifest(session_id, manifest)
                     return ReplayResult(

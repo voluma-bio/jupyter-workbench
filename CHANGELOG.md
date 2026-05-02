@@ -15,5 +15,6 @@ Caveman style. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Bootstrap `jupyter-workbench` package scaffold.
 
 ### Changed
+- Replay failure now shuts down contaminated kernels, preserves `replay_failed` status, and removes orphan revision backups.
 - Session close now reports failed shutdowns instead of hiding live kernels.
 - Session open now reopens closed/create-failed sessions with crash-safe manifests.
