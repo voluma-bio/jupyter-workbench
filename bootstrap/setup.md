@@ -71,6 +71,7 @@ A new session creates:
       notebooks/
         active.ipynb
       outputs/
+      events.jsonl
       visualizations/
         manifests/
         screenshots/

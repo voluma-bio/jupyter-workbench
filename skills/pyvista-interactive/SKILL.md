@@ -113,8 +113,8 @@ Poll from a caller-managed cursor:
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
-events, cursor = events.read(cursor=0)
-print({'events': events, 'cursor': cursor})
+records, cursor = events.read(cursor=0)
+print({'events': records, 'cursor': cursor})
 "
 ```
 
@@ -122,8 +122,8 @@ Wait for a new interaction with an explicit timeout:
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
-events, cursor, timed_out = events.wait(cursor, timeout=10.0)
-print({'events': events, 'cursor': cursor, 'timed_out': timed_out})
+records, cursor, timed_out = events.wait(cursor, timeout=10.0)
+print({'events': records, 'cursor': cursor, 'timed_out': timed_out})
 "
 ```
 
