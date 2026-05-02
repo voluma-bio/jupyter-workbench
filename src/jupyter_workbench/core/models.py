@@ -93,6 +93,9 @@ class LineageInfo:
     source_notebook: str
     derived_notebooks: list[str]
     revision_count: int
+    revisions: list[dict[str, Any]]
+    active_notebook: str
+    is_derived: bool
 
 
 @dataclass(frozen=True)
@@ -113,6 +116,7 @@ class DerivationResult:
     session_id: str
     derived_notebook_path: str
     source_notebook: str
+    active_notebook: str
 
 
 @dataclass(frozen=True)
@@ -123,3 +127,4 @@ class CompactionResult:
     compacted_notebook_path: str
     cells_removed: int
     cells_kept: int
+    source_notebook: str

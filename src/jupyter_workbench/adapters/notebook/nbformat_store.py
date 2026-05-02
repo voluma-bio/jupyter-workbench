@@ -65,6 +65,12 @@ class NbformatStore:
         notebook = self._read(path)
         return [dict(cell) for cell in notebook.cells]
 
+    def write_cells(self, path: Path, cells: list[dict[str, Any]], metadata: dict[str, Any] | None = None) -> None:
+        """Write a notebook from serializable cell dictionaries."""
+        notebook = nbformat.v4.new_notebook(metadata=metadata or {})
+        notebook.cells = [NotebookNode(cell) for cell in cells]
+        self._write(path, notebook)
+
     def clear_code_outputs(self, path: Path) -> None:
         """Clear outputs and execution counts from all code cells."""
         notebook = self._read(path)

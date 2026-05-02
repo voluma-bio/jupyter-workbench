@@ -127,6 +127,22 @@ def lineage(session_id: str, root_dir: str = ".jupyter-workbench") -> dict[str, 
     return asdict(_lineage_service(Path(root_dir)).lineage(session_id))
 
 
+@mcp.tool
+def derive(session_id: str, root_dir: str = ".jupyter-workbench") -> dict[str, Any]:
+    """Create a derived notebook."""
+    return asdict(_lineage_service(Path(root_dir)).derive(session_id))
+
+
+@mcp.tool
+def compact(
+    session_id: str,
+    cells_to_remove: list[int] | None = None,
+    root_dir: str = ".jupyter-workbench",
+) -> dict[str, Any]:
+    """Compact notebook history into a cleanup artifact."""
+    return asdict(_lineage_service(Path(root_dir)).compact(session_id, cells_to_remove=cells_to_remove))
+
+
 def main() -> None:
     """Run the FastMCP server."""
     mcp.run()

@@ -137,6 +137,10 @@ class NotebookPort(Protocol):
         """Read notebook cells as serializable dictionaries."""
         ...
 
+    def write_cells(self, path: Path, cells: list[dict[str, Any]], metadata: dict[str, Any] | None = None) -> None:
+        """Write a notebook from serializable cell dictionaries."""
+        ...
+
     def clear_code_outputs(self, path: Path) -> None:
         """Clear outputs and execution counts from all code cells."""
         ...

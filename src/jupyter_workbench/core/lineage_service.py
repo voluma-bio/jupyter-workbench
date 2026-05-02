@@ -40,14 +40,20 @@ class LineageService:
         notebook_path = self._notebook_path(manifest)
         metadata = self._read_lineage(session_id, notebook_path)
         notebooks_dir = self._session_dir(session_id) / "notebooks"
-        revision_count = len(metadata.get("revisions", []))
+        revisions = self._revision_records(metadata)
+        revision_count = len(revisions)
         if revision_count == 0:
             revision_count = len(list(notebooks_dir.glob("revision_*.ipynb")))
+        derived_notebooks = [self._rooted_path(str(path)) for path in metadata.get("derived_notebooks", [])]
+        active_notebook = str(notebook_path)
         return LineageInfo(
             session_id=session_id,
-            source_notebook=str(self.root_dir / str(metadata["source_notebook"])),
-            derived_notebooks=[str(self.root_dir / str(path)) for path in metadata.get("derived_notebooks", [])],
+            source_notebook=self._rooted_path(str(metadata["source_notebook"])),
+            derived_notebooks=derived_notebooks,
             revision_count=revision_count,
+            revisions=revisions,
+            active_notebook=active_notebook,
+            is_derived=active_notebook in derived_notebooks,
         )
 
     def replay(self, session_id: str) -> ReplayResult:
@@ -139,12 +145,81 @@ class LineageService:
     def derive(self, session_id: str) -> DerivationResult:
         """Create a derived notebook for a session."""
         with self.locks.acquire(session_id):
-            raise NotImplementedError
+            manifest = self._read_manifest(session_id)
+            source_path = self._notebook_path(manifest)
+            if not source_path.exists():
+                raise SessionNotFoundError(f"notebook not found for session: {session_id}")
+            lineage = self._read_lineage(session_id, source_path)
+            derived_path = self._next_derived_path(session_id, "derived")
+            cells = self.notebook.read_cells(source_path)
+            self.notebook.write_cells(
+                derived_path,
+                cells,
+                metadata=self._lineage_notebook_metadata(session_id, source_path, "derive"),
+            )
+            relative_derived = self._relative_to_root(derived_path)
+            lineage.setdefault("derived_notebooks", []).append(relative_derived)
+            lineage.setdefault("revisions", []).append(
+                {
+                    "created_at": self._now(),
+                    "type": "derive",
+                    "source": self._relative_to_root(source_path),
+                    "derived": relative_derived,
+                    "cell_count": len(cells),
+                }
+            )
+            self._write_lineage(session_id, lineage)
+            manifest["notebook_path"] = relative_derived
+            manifest["status"] = "active"
+            self._write_manifest(session_id, manifest)
+            return DerivationResult(
+                session_id=session_id,
+                derived_notebook_path=str(derived_path),
+                source_notebook=str(source_path),
+                active_notebook=str(derived_path),
+            )
 
-    def compact(self, session_id: str) -> CompactionResult:
+    def compact(self, session_id: str, cells_to_remove: list[int] | None = None) -> CompactionResult:
         """Compact notebook history for a session."""
         with self.locks.acquire(session_id):
-            raise NotImplementedError
+            manifest = self._read_manifest(session_id)
+            source_path = self._notebook_path(manifest)
+            if not source_path.exists():
+                raise SessionNotFoundError(f"notebook not found for session: {session_id}")
+            cells = self.notebook.read_cells(source_path)
+            remove_indexes = self._normalize_cells_to_remove(cells, cells_to_remove)
+            compacted_cells = [cell for index, cell in enumerate(cells) if index not in remove_indexes]
+            compacted_path = self._next_derived_path(session_id, "compacted")
+            self.notebook.write_cells(
+                compacted_path,
+                compacted_cells,
+                metadata=self._lineage_notebook_metadata(session_id, source_path, "compact"),
+            )
+
+            lineage = self._read_lineage(session_id, source_path)
+            relative_compacted = self._relative_to_root(compacted_path)
+            lineage.setdefault("derived_notebooks", []).append(relative_compacted)
+            lineage.setdefault("revisions", []).append(
+                {
+                    "created_at": self._now(),
+                    "type": "compact",
+                    "source": self._relative_to_root(source_path),
+                    "derived": relative_compacted,
+                    "cells_removed": sorted(remove_indexes),
+                    "cells_kept": len(compacted_cells),
+                }
+            )
+            self._write_lineage(session_id, lineage)
+            manifest["notebook_path"] = relative_compacted
+            manifest["status"] = "active"
+            self._write_manifest(session_id, manifest)
+            return CompactionResult(
+                session_id=session_id,
+                compacted_notebook_path=str(compacted_path),
+                cells_removed=len(remove_indexes),
+                cells_kept=len(compacted_cells),
+                source_notebook=str(source_path),
+            )
 
     def _session_dir(self, session_id: str) -> Path:
         return self.root_dir / "sessions" / session_id
@@ -197,6 +272,70 @@ class LineageService:
             if isinstance(revision, dict)
         ]
         return max(existing, default=0) + 1
+
+    def _next_derived_path(self, session_id: str, prefix: str) -> Path:
+        notebooks_dir = self._session_dir(session_id) / "notebooks"
+        notebooks_dir.mkdir(parents=True, exist_ok=True)
+        index = 1
+        while True:
+            path = notebooks_dir / f"{prefix}_{index}.ipynb"
+            if not path.exists():
+                return path
+            index += 1
+
+    def _lineage_notebook_metadata(self, session_id: str, source_path: Path, operation: str) -> dict[str, Any]:
+        return {
+            "jupyter_workbench": {
+                "lineage": {
+                    "session_id": session_id,
+                    "operation": operation,
+                    "source_notebook": self._relative_to_root(source_path),
+                    "created_at": self._now(),
+                }
+            }
+        }
+
+    def _normalize_cells_to_remove(
+        self,
+        cells: list[dict[str, Any]],
+        cells_to_remove: list[int] | None,
+    ) -> set[int]:
+        if cells_to_remove is not None:
+            invalid = [index for index in cells_to_remove if index < 0 or index >= len(cells)]
+            if invalid:
+                raise IndexError(f"cell index out of range: {invalid[0]}")
+            return set(cells_to_remove)
+        return self._dead_end_cell_indexes(cells)
+
+    def _dead_end_cell_indexes(self, cells: list[dict[str, Any]]) -> set[int]:
+        code_indexes = [index for index, cell in enumerate(cells) if cell.get("cell_type") == "code"]
+        successful_code_after: set[int] = set()
+        seen_success = False
+        for index in reversed(code_indexes):
+            if seen_success:
+                successful_code_after.add(index)
+            if not self._cell_has_error(cells[index]):
+                seen_success = True
+        return {
+            index
+            for index in code_indexes
+            if self._cell_has_error(cells[index]) and index in successful_code_after
+        }
+
+    def _cell_has_error(self, cell: dict[str, Any]) -> bool:
+        return any(
+            isinstance(output, dict) and output.get("output_type") == "error"
+            for output in cell.get("outputs", [])
+        )
+
+    def _revision_records(self, lineage: dict[str, Any]) -> list[dict[str, Any]]:
+        return [dict(revision) for revision in lineage.get("revisions", []) if isinstance(revision, dict)]
+
+    def _rooted_path(self, path: str) -> str:
+        candidate = Path(path)
+        if candidate.is_absolute():
+            return str(candidate)
+        return str(self.root_dir / candidate)
 
     def _write_replay_error(self, session_id: str, cell_index: int, content: str) -> str:
         output_dir = self._session_dir(session_id) / "outputs"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
 
@@ -12,7 +13,6 @@ from rich.table import Table
 from jupyter_workbench.adapters.kernel.jupyter_client_manager import JupyterClientManager
 from jupyter_workbench.adapters.notebook.nbformat_store import NbformatStore
 from jupyter_workbench.adapters.visualization.pyvista_trame import PyVistaTrameHelper
-from dataclasses import asdict
 
 from jupyter_workbench.core.execution_service import ExecutionService
 from jupyter_workbench.core.lineage_service import LineageService
@@ -141,10 +141,6 @@ def _print_session_list(session_list: SessionList) -> None:
 
 def _handle_missing_session(error: SessionNotFoundError) -> None:
     raise typer.BadParameter(str(error)) from error
-
-
-def _not_implemented() -> None:
-    console.print("Not yet implemented")
 
 
 @app.command("open")
@@ -296,14 +292,32 @@ def lineage(
 @app.command("derive")
 def derive(
     session_id: Annotated[str, typer.Argument(help="Session id to derive from.")],
+    root_dir: Annotated[
+        Path,
+        typer.Option("--root-dir", help="Durable workbench root directory."),
+    ] = Path(".jupyter-workbench"),
 ) -> None:
     """Create a derived notebook."""
-    _not_implemented()
+    try:
+        console.print_json(data=asdict(_lineage_service(root_dir).derive(session_id)))
+    except SessionNotFoundError as error:
+        _handle_missing_session(error)
 
 
 @app.command("compact")
 def compact(
     session_id: Annotated[str, typer.Argument(help="Session id to compact.")],
+    cells: Annotated[
+        list[int] | None,
+        typer.Option("--cell", "-c", help="Cell index to remove. Repeat to remove multiple cells."),
+    ] = None,
+    root_dir: Annotated[
+        Path,
+        typer.Option("--root-dir", help="Durable workbench root directory."),
+    ] = Path(".jupyter-workbench"),
 ) -> None:
     """Compact notebook history into a cleanup artifact."""
-    _not_implemented()
+    try:
+        console.print_json(data=asdict(_lineage_service(root_dir).compact(session_id, cells_to_remove=cells)))
+    except SessionNotFoundError as error:
+        _handle_missing_session(error)

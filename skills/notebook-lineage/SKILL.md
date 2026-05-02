@@ -14,6 +14,37 @@ jupyter-workbench lineage review-1
 ```
 
 `lineage` is read-only. It reports the active notebook, derived notebooks, and replay revision count from `sessions/<id>/lineage.json` plus durable notebook files.
+The output also includes full `revisions`, `active_notebook`, and `is_derived` so agents can see the exact replay, derive, and compact chain before mutating notebook state.
+
+## Derive a clean notebook
+
+Use `derive` before exploratory edits that should not alter the current notebook artifact:
+
+```bash
+jupyter-workbench derive review-1
+```
+
+Derive copies every cell from the current active notebook into `sessions/<id>/notebooks/derived_N.ipynb`, records the derivation in `lineage.json`, and updates the manifest so future `exec` and `markdown` writes go to the derived notebook. If a derived notebook is already active, derive chains from that active notebook.
+
+## Compact dead-end cells
+
+Use `compact` to make a cleanup notebook:
+
+```bash
+jupyter-workbench compact review-1
+```
+
+Without explicit cell indexes, compact removes failed code cells that have a later successful code cell, treating them as dead-end attempts superseded by corrections. To remove specific cells, repeat `--cell`:
+
+```bash
+jupyter-workbench compact review-1 --cell 3 --cell 4
+```
+
+Compact writes a new `sessions/<id>/notebooks/compacted_N.ipynb`, records removed/kept cells in lineage metadata, and makes the compacted notebook active for future writes.
+
+## Source preservation guarantee
+
+Lineage mutations never edit the notebook they derive or compact from. The source notebook remains on disk unchanged, and cleanup work always lands in a new derived notebook artifact.
 
 ## Recover a degraded kernel
 
