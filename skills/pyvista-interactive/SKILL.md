@@ -1,23 +1,17 @@
 ---
 name: pyvista-interactive
-description: Build PyVista + trame-vtklocal interactive scenes inside a jupyter-workbench kernel session.
+description: Show interactive 3D PyVista scenes to users from a jupyter-workbench session. Use when analysis output needs visual verification in a browser.
 ---
 
 # PyVista Interactive
 
-Use this skill when an agent needs a user-visible PyVista scene from a durable `jupyter-workbench` session. Visualization runs inside the persistent Jupyter kernel via `trame-vtklocal` (VTK.wasm). There is no separate visualization CLI.
+Visualization runs inside the persistent Jupyter kernel via trame-vtklocal (VTK.wasm). One CLI tool, one kernel, one session.
 
-## Start a live scene
-
-1. Open or attach to a session.
+## Show a scene
 
 ```bash
 jupyter-workbench open --session-id review-1
-```
 
-2. Execute scene setup code in the kernel. The `PyVistaDisplay` builder handles interactor normalization, trame server lifecycle, and display automatically.
-
-```bash
 jupyter-workbench exec --session-id review-1 "
 import pyvista as pv
 from jupyter_workbench.visualization import PyVistaDisplay
@@ -30,58 +24,25 @@ print(scene.url)
 "
 ```
 
-The `scene` handle stays in kernel memory for later updates, screenshots, and cleanup.
+Ask the user to open the browser URL. The `scene` handle stays in kernel memory for updates and cleanup.
 
-Options on the builder (all optional):
-- `.title('My Scene')` — set scene title
-- `.port(9000)` — explicit port (default: OS-assigned)
-- `.public_host('my-server.local')` — public URL host
-- `.track_camera()` — log camera movement to the session event log (requires `event_log`)
+Builder options:
+- `.port(9000)` — fixed port; omit for OS-assigned (supports multiple scenes)
+- `.public_host('my-server.local')` — when the server is accessed via a different hostname
+- `.title('Pressure field')` — scene title in the browser
+- `.track_camera()` — log camera events to the session event log (pass `event_log` to `for_session`)
 - `.use(extension)` — register a custom `SceneExtension`
-- `.show(display=False)` — return handle without displaying iframe
 
-The execution result should surface `visualization_delta` when trame display output includes a browser URL. If the URL is present, ask the user to open it; do not replace the review with text-only descriptions.
+## Observation loop
 
-## Inspect durable visualization state
+The core human-in-the-loop workflow:
 
-```bash
-jupyter-workbench snapshot --session-id review-1
-```
+1. `exec` creates or updates the scene via `PyVistaDisplay`.
+2. User views and manipulates the scene in the browser.
+3. Agent captures a screenshot or polls events.
+4. Agent explains what changed before applying the next update.
 
-Read `visualization_status`, `visualization_summary.active_scene.browser_url`, `visualization_summary.scene_revision`, `visualization_summary.degraded_scenes`, `visualization_summary.recovery_guidance`, and `visualization_summary.screenshots`. These are persisted under:
-
-```text
-.jupyter-workbench/sessions/review-1/visualizations/
-  manifests/active.json
-  screenshots/
-```
-
-## Scene lifecycle
-
-Close a scene when done to free the port and update status:
-
-```bash
-jupyter-workbench exec --session-id review-1 "
-scene.close()
-"
-```
-
-Or use a context manager for automatic cleanup:
-
-```bash
-jupyter-workbench exec --session-id review-1 "
-import pyvista as pv
-from jupyter_workbench.visualization import PyVistaDisplay
-
-plotter = pv.Plotter(off_screen=True)
-plotter.add_mesh(pv.Sphere(), color='tomato')
-with PyVistaDisplay.for_session('review-1', plotter).port(9000).show(display=False) as scene:
-    print(scene.url)
-    # scene closes automatically on exit
-"
-```
-
-Update a running scene after modifying the plotter:
+Update a running scene:
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
@@ -90,21 +51,17 @@ scene.refresh()
 "
 ```
 
-## Recover degraded visualization
+Close when done:
 
-A snapshot with `visualization_status: "visualization_degraded"` means the visualization layer failed or trame display data did not surface a usable browser URL. The kernel can still be healthy and remains the source of truth for recovery. Continue using `jupyter-workbench exec`, `snapshot`, `lineage`, `replay`, and future derive/compact flows against the same session.
+```bash
+jupyter-workbench exec --session-id review-1 "
+scene.close()
+"
+```
 
-Recovery path:
+## Screenshots
 
-1. Read `visualization_summary.degraded_scenes` and `visualization_summary.recovery_guidance`.
-2. Re-execute the scene setup cell/code through `jupyter-workbench exec --session-id <id> ...`.
-3. Confirm the next `exec` result has `visualization_delta.scene.status == "healthy"` or the next snapshot returns `visualization_status: "visualization_healthy"`.
-
-Do not launch a second runtime tool to reconstruct the scene; rebuild it through the existing workbench kernel/session so notebook lineage remains authoritative.
-
-## Capture a screenshot
-
-Screenshots are captured by executing Python in the same kernel that owns the live plotter. Prefer the helper because it creates the durable artifact directory and returns the artifact path.
+Use the helper — it creates the artifact directory and returns the path:
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
@@ -114,7 +71,7 @@ print(shot)
 "
 ```
 
-Direct pattern when a helper import is not appropriate:
+Direct fallback:
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
@@ -126,21 +83,11 @@ print(path)
 "
 ```
 
-A later `snapshot` should include the screenshot path in `visualization_summary.screenshots`.
-
-## Observation loop
-
-Repeat this loop for human-in-the-loop work:
-
-1. `exec` creates or updates the PyVista scene via `PyVistaDisplay`.
-2. The scene serves a live browser view via trame-vtklocal (VTK.wasm).
-3. User observes and manipulates the scene in the browser (rotate, pan, zoom).
-4. Agent captures screenshots or polls event helpers when available.
-5. Agent explains what changed and why in plain language before applying another `exec` update.
+Snapshot includes screenshot paths in `visualization_summary.screenshots`.
 
 ## Durable interaction events
 
-Enable camera tracking via the builder for automatic event logging:
+Camera tracking via the builder:
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
@@ -158,7 +105,7 @@ print(scene.url)
 "
 ```
 
-For additional interaction callbacks (picks, sliders, keys), use `PyVistaTrameHelper` directly:
+Additional callbacks (picks, sliders, keys) via `PyVistaTrameHelper`:
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
@@ -171,7 +118,7 @@ viz.register_key_callback('review-1', plotter, events)
 "
 ```
 
-Poll from a caller-managed cursor:
+Poll events:
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
@@ -180,7 +127,7 @@ print({'events': records, 'cursor': cursor})
 "
 ```
 
-Wait for a new interaction with an explicit timeout:
+Wait with timeout:
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
@@ -189,4 +136,26 @@ print({'events': records, 'cursor': cursor, 'timed_out': timed_out})
 "
 ```
 
-Event records have `seq`, `ts`, `type`, and `payload`. Snapshot includes `event_summary.recent_events`, `event_summary.total_event_count`, and `event_summary.cursor`.
+Event records have `seq`, `ts`, `type`, and `payload`. Snapshot surfaces `event_summary`.
+
+## Inspect visualization state
+
+```bash
+jupyter-workbench snapshot --session-id review-1
+```
+
+Key fields: `visualization_status`, `visualization_summary.active_scene.browser_url`, `visualization_summary.scene_revision`, `visualization_summary.screenshots`.
+
+Persisted under:
+
+```text
+.jupyter-workbench/sessions/review-1/visualizations/
+  manifests/active.json
+  screenshots/
+```
+
+## Recover degraded visualization
+
+`visualization_status: "visualization_degraded"` means the scene failed but the kernel may still be healthy. Re-execute the scene setup through `exec` and check that `visualization_delta.scene.status == "healthy"` or `visualization_status` returns to `"visualization_healthy"`.
+
+Rebuild through the existing kernel/session so notebook lineage stays authoritative.
