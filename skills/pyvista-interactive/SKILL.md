@@ -1,11 +1,11 @@
 ---
 name: pyvista-interactive
-description: Build PyVista + trame interactive scenes inside a jupyter-workbench kernel session.
+description: Build PyVista + trame-vtklocal interactive scenes inside a jupyter-workbench kernel session.
 ---
 
 # PyVista Interactive
 
-Use this skill when an agent needs a user-visible PyVista scene from a durable `jupyter-workbench` session. Visualization runs inside the persistent Jupyter kernel. There is no separate visualization CLI.
+Use this skill when an agent needs a user-visible PyVista scene from a durable `jupyter-workbench` session. Visualization runs inside the persistent Jupyter kernel via `trame-vtklocal` (VTK.wasm). There is no separate visualization CLI.
 
 ## Start a live scene
 
@@ -15,30 +15,30 @@ Use this skill when an agent needs a user-visible PyVista scene from a durable `
 jupyter-workbench open --session-id review-1
 ```
 
-2. Execute scene setup code in the kernel and show it with `trame-vtklocal`. Keep the `plotter` variable in kernel memory for later updates and screenshots.
+2. Execute scene setup code in the kernel. The `PyVistaDisplay` builder handles interactor normalization, trame server lifecycle, and display automatically.
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
 import pyvista as pv
-from jupyter_workbench.adapters.visualization.vtklocal import launch_vtklocal_view
+from jupyter_workbench.visualization import PyVistaDisplay
 
 plotter = pv.Plotter(off_screen=True)
 plotter.add_mesh(pv.Sphere(), color='tomato')
 plotter.add_axes()
-launch = launch_vtklocal_view(
-    plotter,
-    bind_host='0.0.0.0',
-    public_host='127.0.0.1',
-    port=9000,
-)
-print(launch['url'])
+scene = PyVistaDisplay.for_session('review-1', plotter).port(9000).show(display=False)
+print(scene.url)
 "
 ```
 
-Fallbacks:
-- `plotter.show(jupyter_backend='trame')` for server-rendered or older vtk.js workflows.
-- `plotter.export_html(...)` when you need a self-contained static vtk.js artifact rather than a live scene.
+The `scene` handle stays in kernel memory for later updates, screenshots, and cleanup.
 
+Options on the builder (all optional):
+- `.title('My Scene')` — set scene title
+- `.port(9000)` — explicit port (default: OS-assigned)
+- `.public_host('my-server.local')` — public URL host
+- `.track_camera()` — log camera movement to the session event log (requires `event_log`)
+- `.use(extension)` — register a custom `SceneExtension`
+- `.show(display=False)` — return handle without displaying iframe
 
 The execution result should surface `visualization_delta` when trame display output includes a browser URL. If the URL is present, ask the user to open it; do not replace the review with text-only descriptions.
 
@@ -56,9 +56,43 @@ Read `visualization_status`, `visualization_summary.active_scene.browser_url`, `
   screenshots/
 ```
 
+## Scene lifecycle
+
+Close a scene when done to free the port and update status:
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+scene.close()
+"
+```
+
+Or use a context manager for automatic cleanup:
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+import pyvista as pv
+from jupyter_workbench.visualization import PyVistaDisplay
+
+plotter = pv.Plotter(off_screen=True)
+plotter.add_mesh(pv.Sphere(), color='tomato')
+with PyVistaDisplay.for_session('review-1', plotter).port(9000).show(display=False) as scene:
+    print(scene.url)
+    # scene closes automatically on exit
+"
+```
+
+Update a running scene after modifying the plotter:
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+plotter.add_mesh(pv.Cube(), color='green', opacity=0.5)
+scene.refresh()
+"
+```
+
 ## Recover degraded visualization
 
-A snapshot with `visualization_status: "visualization_degraded"` means the visualization layer failed or PyVista/trame display data did not surface a usable browser URL. The kernel can still be healthy and remains the source of truth for recovery. Continue using `jupyter-workbench exec`, `snapshot`, `lineage`, `replay`, and future derive/compact flows against the same session.
+A snapshot with `visualization_status: "visualization_degraded"` means the visualization layer failed or trame display data did not surface a usable browser URL. The kernel can still be healthy and remains the source of truth for recovery. Continue using `jupyter-workbench exec`, `snapshot`, `lineage`, `replay`, and future derive/compact flows against the same session.
 
 Recovery path:
 
@@ -98,27 +132,42 @@ A later `snapshot` should include the screenshot path in `visualization_summary.
 
 Repeat this loop for human-in-the-loop work:
 
-1. `exec` creates or updates the PyVista scene.
-2. `launch_vtklocal_view(...)` provides a live browser scene in headless-friendly local mode.
-3. User observes and manipulates the browser-viewable scene.
+1. `exec` creates or updates the PyVista scene via `PyVistaDisplay`.
+2. The scene serves a live browser view via trame-vtklocal (VTK.wasm).
+3. User observes and manipulates the scene in the browser (rotate, pan, zoom).
 4. Agent captures screenshots or polls event helpers when available.
 5. Agent explains what changed and why in plain language before applying another `exec` update.
 
 ## Durable interaction events
 
-Use `DurableEventLog` in notebook-executed code when the user needs to manipulate a live scene and have agents observe typed events later. The log lives at `sessions/<session_id>/events.jsonl`; cursors are byte offsets owned by each caller. One consumer reading events does not advance another consumer.
+Enable camera tracking via the builder for automatic event logging:
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
 from jupyter_workbench.adapters.visualization.event_log import DurableEventLog
-from jupyter_workbench.adapters.visualization.pyvista_trame import PyVistaTrameHelper
+from jupyter_workbench.visualization import PyVistaDisplay
 
 events = DurableEventLog('.jupyter-workbench', 'review-1')
+scene = (
+    PyVistaDisplay.for_session('review-1', plotter, event_log=events)
+    .track_camera()
+    .port(9000)
+    .show(display=False)
+)
+print(scene.url)
+"
+```
+
+For additional interaction callbacks (picks, sliders, keys), use `PyVistaTrameHelper` directly:
+
+```bash
+jupyter-workbench exec --session-id review-1 "
+from jupyter_workbench.adapters.visualization.pyvista_trame import PyVistaTrameHelper
+
 viz = PyVistaTrameHelper('.jupyter-workbench')
 viz.register_pick_callback('review-1', plotter, events)
 viz.register_slider_callback('review-1', plotter, events, (0.0, 10.0), 'threshold')
 viz.register_key_callback('review-1', plotter, events)
-viz.register_camera_callback('review-1', plotter, events)
 "
 ```
 
