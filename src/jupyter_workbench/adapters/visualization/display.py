@@ -28,11 +28,13 @@ class PyVistaDisplay:
         *,
         event_log: Any | None = None,
         root_dir: Path | None = None,
+        viz_port: Any = None,
     ) -> None:
         self._session_id = session_id
         self._plotter = plotter
         self._event_log = event_log
         self._root_dir = root_dir
+        self._viz_port = viz_port
         self._title: str = "jupyter-workbench — vtklocal"
         self._port: int = 0
         self._bind_host: str = "0.0.0.0"
@@ -50,6 +52,7 @@ class PyVistaDisplay:
         *,
         event_log: Any | None = None,
         root_dir: Path | None = None,
+        viz_port: Any = None,
     ) -> PyVistaDisplay:
         """Create a builder for a session and plotter.
 
@@ -58,6 +61,7 @@ class PyVistaDisplay:
             plotter: A PyVista plotter with a render_window.
             event_log: Optional EventLogPort for extension logging.
             root_dir: Optional root dir for session artifacts.
+            viz_port: Optional VisualizationPort for cleanup status updates.
 
         Raises:
             VisualizationConfigError: If plotter has no render_window.
@@ -65,7 +69,7 @@ class PyVistaDisplay:
         render_window = getattr(plotter, "render_window", None)
         if render_window is None:
             raise VisualizationConfigError("plotter has no render_window")
-        return cls(session_id, plotter, event_log=event_log, root_dir=root_dir)
+        return cls(session_id, plotter, event_log=event_log, root_dir=root_dir, viz_port=viz_port)
 
     def title(self, title: str) -> PyVistaDisplay:
         """Set the scene title."""
@@ -142,7 +146,7 @@ class PyVistaDisplay:
         )
 
         runtime = VtkLocalRuntime()
-        handle = runtime.launch(config, self._plotter, extensions=self._extensions)
+        handle = runtime.launch(config, self._plotter, extensions=self._extensions, viz_port=self._viz_port)
 
         if display:
             from IPython.display import display as ipy_display  # pyright: ignore[reportMissingImports]

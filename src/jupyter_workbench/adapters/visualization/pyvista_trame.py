@@ -15,7 +15,7 @@ from jupyter_workbench.core.interfaces import EventLogPort
 from uuid import uuid4
 
 URL_PATTERN = re.compile(r"https?://[^\s'\"<>]+")
-TRAME_MARKERS = ("trame", "wslink", "vtk", "pyvista", "jupyter-server-proxy")
+TRAME_MARKERS = ("trame", "wslink", "vtk", "pyvista", "jupyter-server-proxy", "vtklocal", "vtk-local")
 LOGGER = logging.getLogger(__name__)
 
 
@@ -192,6 +192,16 @@ class PyVistaTrameHelper:
         self._write_scene(session_id, viz_id, manifest)
         return manifest
 
+    def mark_absent(self, session_id: str, viz_id: str) -> dict[str, Any]:
+        """Mark a persisted scene as absent (cleaned up) and return its manifest."""
+        manifest = self._read_scene(session_id, viz_id)
+        if not manifest:
+            manifest = {"viz_id": viz_id, "browser_url": None, "scene_revision": 0}
+        manifest["status"] = "absent"
+        manifest["updated_at"] = self._now()
+        self._write_scene(session_id, viz_id, manifest)
+        return manifest
+
     def detect_degradation(self, session_id: str) -> bool:
         """Return whether any persisted scene is marked degraded."""
         return any(scene.get("status") == "degraded" for scene in self.list_scenes(session_id))
@@ -219,12 +229,17 @@ class PyVistaTrameHelper:
             has_iframe_url = bool(urls) and "iframe" in lowered
             if not has_trame_marker and not has_iframe_url:
                 continue
+            viz_id = self._extract_viz_id_from_url(urls[0] if urls else "") or "active"
             return {
-                "viz_id": "active",
+                "viz_id": viz_id,
                 "browser_url": urls[0].rstrip("\\") if urls else None,
                 "status": "healthy" if urls else "degraded",
                 "source": "jupyter_display_data",
             }
+        return None
+
+    def _extract_viz_id_from_url(self, url: str) -> str | None:
+        """Try to extract a viz_id from a trame scene URL."""
         return None
 
     def screenshot_paths(self, session_id: str) -> list[str]:

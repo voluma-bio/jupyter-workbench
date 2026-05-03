@@ -53,6 +53,7 @@ class SceneHandle:
     viz_id: str
     interactor_fix: dict[str, Any]
     _extensions: list[Any] = field(default_factory=list, repr=False)
+    _viz_port: Any = field(default=None, repr=False)
     _closed: bool = field(default=False, repr=False)
 
     def refresh(self) -> None:
@@ -69,17 +70,23 @@ class SceneHandle:
         import asyncio
         import warnings
 
+        stop_failed = False
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                loop.create_task(self._async_stop())
+                loop.create_task(self._async_stop_and_mark())
+                return
             else:
                 warnings.warn(
                     "no running event loop for server.stop(); server may not shut down cleanly",
                     stacklevel=2,
                 )
+                stop_failed = True
         except Exception as exc:
             warnings.warn(f"failed to schedule server shutdown: {exc}", stacklevel=2)
+            stop_failed = True
+
+        self._update_scene_status(degraded=stop_failed)
 
     async def aclose(self) -> None:
         """Await full server shutdown."""
@@ -87,15 +94,40 @@ class SceneHandle:
             return
         self._closed = True
         self._close_extensions()
-        await self._async_stop()
-
-    async def _async_stop(self) -> None:
-        import warnings
-
+        stop_failed = False
         try:
             await self.server.stop()
         except Exception as exc:
+            import warnings
+
             warnings.warn(f"server stop failed: {exc}", stacklevel=2)
+            stop_failed = True
+        self._update_scene_status(degraded=stop_failed)
+
+    async def _async_stop_and_mark(self) -> None:
+        stop_failed = False
+        try:
+            await self.server.stop()
+        except Exception as exc:
+            import warnings
+
+            warnings.warn(f"server stop failed: {exc}", stacklevel=2)
+            stop_failed = True
+        self._update_scene_status(degraded=stop_failed)
+
+    def _update_scene_status(self, *, degraded: bool = False) -> None:
+        """Update scene status via VisualizationPort. Warns on failure."""
+        import warnings
+
+        if self._viz_port is None:
+            return
+        try:
+            if degraded:
+                self._viz_port.mark_degraded(self.session_id, self.viz_id)
+            else:
+                self._viz_port.mark_absent(self.session_id, self.viz_id)
+        except Exception as exc:
+            warnings.warn(f"failed to update scene status: {exc}", stacklevel=2)
 
     def _close_extensions(self) -> None:
         for ext in reversed(self._extensions):
@@ -121,7 +153,13 @@ class SceneHandle:
 class VtkLocalRuntime:
     """Launch orchestrator for trame-vtklocal scenes."""
 
-    def launch(self, config: DisplayConfig, plotter: Any, extensions: list[Any] | None = None) -> SceneHandle:
+    def launch(
+        self,
+        config: DisplayConfig,
+        plotter: Any,
+        extensions: list[Any] | None = None,
+        viz_port: Any = None,
+    ) -> SceneHandle:
         """Execute the full launch sequence and return a SceneHandle."""
         from IPython.display import IFrame  # pyright: ignore[reportMissingImports]
         from trame.app import get_server  # pyright: ignore[reportMissingImports]
@@ -187,6 +225,7 @@ class VtkLocalRuntime:
             viz_id=viz_id,
             interactor_fix=interactor_fix,
             _extensions=exts,
+            _viz_port=viz_port,
         )
 
         self._call_extension_hook(exts, "after_start", handle)

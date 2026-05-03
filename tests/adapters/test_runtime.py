@@ -152,6 +152,25 @@ class FakeIFrame:
         self.height = height
 
 
+class FakeVizPort:
+    def __init__(self, fail: bool = False) -> None:
+        self.absent_calls: list[tuple[str, str]] = []
+        self.degraded_calls: list[tuple[str, str]] = []
+        self._fail = fail
+
+    def mark_absent(self, session_id: str, viz_id: str) -> dict[str, str]:
+        if self._fail:
+            raise RuntimeError("status update failed")
+        self.absent_calls.append((session_id, viz_id))
+        return {"status": "absent"}
+
+    def mark_degraded(self, session_id: str, viz_id: str) -> dict[str, str]:
+        if self._fail:
+            raise RuntimeError("status update failed")
+        self.degraded_calls.append((session_id, viz_id))
+        return {"status": "degraded"}
+
+
 @pytest.fixture(autouse=True)
 def mock_trame_and_vtk(monkeypatch: pytest.MonkeyPatch) -> types.SimpleNamespace:
     """Monkeypatch trame/VTK/IPython modules for all tests."""
@@ -296,6 +315,58 @@ def test_scene_handle_async_context_manager(runtime: VtkLocalRuntime, plotter: F
         assert handle.server.stopped is True
 
     asyncio.run(run())
+
+
+def test_aclose_marks_absent_on_success(runtime: VtkLocalRuntime, plotter: FakePlotter) -> None:
+    viz_port = FakeVizPort()
+    handle = runtime.launch(DisplayConfig(session_id="test-session"), plotter, viz_port=viz_port)
+
+    asyncio.run(handle.aclose())
+
+    assert viz_port.absent_calls == [(handle.session_id, handle.viz_id)]
+    assert viz_port.degraded_calls == []
+
+
+def test_aclose_marks_degraded_on_stop_failure(runtime: VtkLocalRuntime, plotter: FakePlotter) -> None:
+    viz_port = FakeVizPort()
+    handle = runtime.launch(DisplayConfig(session_id="test-session"), plotter, viz_port=viz_port)
+
+    async def failing_stop() -> None:
+        raise RuntimeError("stop failed")
+
+    handle.server.stop = failing_stop
+
+    with pytest.warns(UserWarning, match="server stop failed: stop failed"):
+        asyncio.run(handle.aclose())
+
+    assert viz_port.degraded_calls == [(handle.session_id, handle.viz_id)]
+    assert viz_port.absent_calls == []
+
+
+def test_close_without_viz_port_no_error(runtime: VtkLocalRuntime, plotter: FakePlotter) -> None:
+    async def run() -> None:
+        handle = runtime.launch(DisplayConfig(session_id="no-viz-port"), plotter)
+        handle.close()
+        await asyncio.sleep(0)
+        assert handle.server.stopped is True
+
+    asyncio.run(run())
+
+
+def test_status_update_failure_warns(runtime: VtkLocalRuntime, plotter: FakePlotter) -> None:
+    viz_port = FakeVizPort(fail=True)
+    handle = runtime.launch(DisplayConfig(session_id="status-fails"), plotter, viz_port=viz_port)
+
+    with pytest.warns(UserWarning, match="failed to update scene status: status update failed"):
+        asyncio.run(handle.aclose())
+
+
+def test_viz_port_passed_through_launch(runtime: VtkLocalRuntime, plotter: FakePlotter) -> None:
+    viz_port = FakeVizPort()
+
+    handle = runtime.launch(DisplayConfig(session_id="viz-port"), plotter, viz_port=viz_port)
+
+    assert handle._viz_port is viz_port
 
 
 def test_launch_error_on_server_start_failure(
