@@ -166,6 +166,7 @@ class VtkLocalRuntime:
         from trame.ui.vuetify3 import SinglePageLayout  # pyright: ignore[reportMissingImports]
         from trame.widgets import vtklocal  # pyright: ignore[reportMissingImports]
 
+        from .extensions import BuildContext, RuntimeContext
         from .interactor import ensure_render_window_interactor
         from .vtklocal import make_server_ready_update, resolve_public_host
 
@@ -173,6 +174,14 @@ class VtkLocalRuntime:
 
         plotter.render()
         interactor_fix = ensure_render_window_interactor(plotter)
+
+        build_ctx = BuildContext(
+            plotter=plotter,
+            render_window=plotter.render_window,
+            session_id=config.session_id,
+            config=config,
+        )
+        self._call_extension_hook(exts, "prepare", build_ctx)
 
         server_name = f"jw-{config.session_id}-{_next_server_id()}"
         server: Any = get_server(server_name)
@@ -184,19 +193,14 @@ class VtkLocalRuntime:
                 view = vtklocal.LocalView(plotter.render_window, **kwargs)
                 server.controller.on_server_ready.add(make_server_ready_update(view))
 
-        build_ctx = {
-            "plotter": plotter,
-            "render_window": plotter.render_window,
-            "session_id": config.session_id,
-            "config": config,
-        }
-        self._call_extension_hook(exts, "prepare", build_ctx)
-
-        runtime_ctx = {
-            **build_ctx,
-            "view": view,
-            "server": server,
-        }
+        runtime_ctx = RuntimeContext(
+            plotter=plotter,
+            render_window=plotter.render_window,
+            session_id=config.session_id,
+            config=config,
+            view=view,
+            server=server,
+        )
         self._call_extension_hook(exts, "bind_view", runtime_ctx)
 
         try:

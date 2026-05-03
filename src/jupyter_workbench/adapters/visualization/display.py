@@ -71,28 +71,40 @@ class PyVistaDisplay:
             raise VisualizationConfigError("plotter has no render_window")
         return cls(session_id, plotter, event_log=event_log, root_dir=root_dir, viz_port=viz_port)
 
+    def _check_not_consumed(self) -> None:
+        if self._consumed:
+            raise VisualizationConfigError(
+                "this builder has already been consumed by .show(); "
+                "construct a new PyVistaDisplay for another scene"
+            )
+
     def title(self, title: str) -> PyVistaDisplay:
         """Set the scene title."""
+        self._check_not_consumed()
         self._title = title
         return self
 
     def port(self, port: int) -> PyVistaDisplay:
         """Set an explicit port (default: 0 = OS-assigned)."""
+        self._check_not_consumed()
         self._port = port
         return self
 
     def bind_host(self, host: str) -> PyVistaDisplay:
         """Set the server bind host (default: 0.0.0.0)."""
+        self._check_not_consumed()
         self._bind_host = host
         return self
 
     def public_host(self, host: str) -> PyVistaDisplay:
         """Set the public URL host."""
+        self._check_not_consumed()
         self._public_host = host
         return self
 
     def iframe_size(self, width: str, height: str) -> PyVistaDisplay:
         """Set iframe dimensions."""
+        self._check_not_consumed()
         self._iframe_width = width
         self._iframe_height = height
         return self
@@ -102,6 +114,7 @@ class PyVistaDisplay:
 
         Requires event_log to be set via for_session().
         """
+        self._check_not_consumed()
         if self._event_log is None:
             from .runtime import VisualizationConfigError as _VCE
 
@@ -112,6 +125,7 @@ class PyVistaDisplay:
 
     def use(self, extension: SceneExtension | Any) -> PyVistaDisplay:
         """Register a custom SceneExtension."""
+        self._check_not_consumed()
         self._extensions.append(extension)
         return self
 
@@ -146,7 +160,7 @@ class PyVistaDisplay:
         )
 
         runtime = VtkLocalRuntime()
-        handle = runtime.launch(config, self._plotter, extensions=self._extensions, viz_port=self._viz_port)
+        handle = runtime.launch(config, self._plotter, extensions=list(self._extensions), viz_port=self._viz_port)
 
         if display:
             from IPython.display import display as ipy_display  # pyright: ignore[reportMissingImports]
