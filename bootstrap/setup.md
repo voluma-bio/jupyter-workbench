@@ -166,17 +166,28 @@ Verify imports when bootstrapping a new environment:
 uv run python -c "import pyvista, trame, trame_vtk, trame_vuetify, ipywidgets, nest_asyncio2; print('viz ok')"
 ```
 
-Create and show a live browser-viewable scene from notebook-executed Python:
+Create and show a live browser-viewable scene from notebook-executed Python. In headless environments, prefer the VTK.wasm-backed helper over PyVista's vtk.js-backed client mode:
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
 import pyvista as pv
-plotter = pv.Plotter()
+from jupyter_workbench.adapters.visualization.vtklocal import launch_vtklocal_view
+
+plotter = pv.Plotter(off_screen=True)
 plotter.add_mesh(pv.Sphere(), color='tomato')
 plotter.add_axes()
-plotter.show(jupyter_backend='trame')
+launch = launch_vtklocal_view(
+    plotter,
+    bind_host='0.0.0.0',
+    public_host='127.0.0.1',
+    port=9000,
+)
+print(launch['url'])
 "
 ```
+
+If you still need the older PyVista/trame path for server rendering or static export workflows, `plotter.show(jupyter_backend='trame')` and `plotter.export_html(...)` remain available.
+
 
 When trame display data includes a URL, `exec` persists scene metadata under:
 

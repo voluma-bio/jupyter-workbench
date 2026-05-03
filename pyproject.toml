@@ -17,10 +17,11 @@ dependencies = [
     "rich",
     "pyvista",
     "trame",
-    "trame-vtk",
+    "trame-vtk>=2.5.8,<2.10.3",
     "trame-vuetify",
     "ipykernel>=7.2.0",
     "filelock>=3.29.0",
+    "trame-vtklocal>=0.17.1",
 ]
 
 [project.optional-dependencies]

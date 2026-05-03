@@ -15,17 +15,30 @@ Use this skill when an agent needs a user-visible PyVista scene from a durable `
 jupyter-workbench open --session-id review-1
 ```
 
-2. Execute scene setup code in the kernel and show it with trame. Keep the `plotter` variable in kernel memory for later updates and screenshots.
+2. Execute scene setup code in the kernel and show it with `trame-vtklocal`. Keep the `plotter` variable in kernel memory for later updates and screenshots.
 
 ```bash
 jupyter-workbench exec --session-id review-1 "
 import pyvista as pv
-plotter = pv.Plotter()
+from jupyter_workbench.adapters.visualization.vtklocal import launch_vtklocal_view
+
+plotter = pv.Plotter(off_screen=True)
 plotter.add_mesh(pv.Sphere(), color='tomato')
 plotter.add_axes()
-plotter.show(jupyter_backend='trame')
+launch = launch_vtklocal_view(
+    plotter,
+    bind_host='0.0.0.0',
+    public_host='127.0.0.1',
+    port=9000,
+)
+print(launch['url'])
 "
 ```
+
+Fallbacks:
+- `plotter.show(jupyter_backend='trame')` for server-rendered or older vtk.js workflows.
+- `plotter.export_html(...)` when you need a self-contained static vtk.js artifact rather than a live scene.
+
 
 The execution result should surface `visualization_delta` when trame display output includes a browser URL. If the URL is present, ask the user to open it; do not replace the review with text-only descriptions.
 
@@ -86,7 +99,7 @@ A later `snapshot` should include the screenshot path in `visualization_summary.
 Repeat this loop for human-in-the-loop work:
 
 1. `exec` creates or updates the PyVista scene.
-2. `plotter.show(jupyter_backend='trame')` provides a live browser scene.
+2. `launch_vtklocal_view(...)` provides a live browser scene in headless-friendly local mode.
 3. User observes and manipulates the browser-viewable scene.
 4. Agent captures screenshots or polls event helpers when available.
 5. Agent explains what changed and why in plain language before applying another `exec` update.

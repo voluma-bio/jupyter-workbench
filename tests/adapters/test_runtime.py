@@ -386,9 +386,9 @@ def test_launch_error_on_server_start_failure(
 def test_extension_prepare_called(runtime: VtkLocalRuntime, plotter: FakePlotter) -> None:
     class Extension:
         def __init__(self) -> None:
-            self.context: dict[str, Any] | None = None
+            self.context: Any | None = None
 
-        def prepare(self, context: dict[str, Any]) -> None:
+        def prepare(self, context: Any) -> None:
             self.context = context
 
     ext = Extension()
@@ -396,27 +396,27 @@ def test_extension_prepare_called(runtime: VtkLocalRuntime, plotter: FakePlotter
     runtime.launch(config, plotter, extensions=[ext])
 
     assert ext.context is not None
-    assert ext.context["plotter"] is plotter
-    assert ext.context["render_window"] is plotter.render_window
-    assert ext.context["session_id"] == "prepare"
-    assert ext.context["config"] is config
+    assert ext.context.plotter is plotter
+    assert ext.context.render_window is plotter.render_window
+    assert ext.context.session_id == "prepare"
+    assert ext.context.config is config
 
 
 def test_extension_bind_view_called(runtime: VtkLocalRuntime, plotter: FakePlotter) -> None:
     class Extension:
         def __init__(self) -> None:
-            self.context: dict[str, Any] | None = None
+            self.context: Any | None = None
 
-        def bind_view(self, context: dict[str, Any]) -> None:
+        def bind_view(self, context: Any) -> None:
             self.context = context
 
     ext = Extension()
     runtime.launch(DisplayConfig(session_id="bind", port=9012), plotter, extensions=[ext])
 
     assert ext.context is not None
-    assert ext.context["plotter"] is plotter
-    assert ext.context["view"].render_window is plotter.render_window
-    assert isinstance(ext.context["server"], FakeServer)
+    assert ext.context.plotter is plotter
+    assert ext.context.view.render_window is plotter.render_window
+    assert isinstance(ext.context.server, FakeServer)
 
 
 def test_extension_after_start_called(runtime: VtkLocalRuntime, plotter: FakePlotter) -> None:
