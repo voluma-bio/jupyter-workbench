@@ -11,10 +11,12 @@ requires-python = ">=3.10"
 dependencies = [
     "jupyter_client",
     "nbformat",
+    "nbconvert",
     "ipywidgets",
     "nest_asyncio2",
     "typer>=0.9",
     "rich",
+    "watchdog",
     "pyvista",
     "trame",
     "trame-vtk>=2.5.8,<2.10.3",

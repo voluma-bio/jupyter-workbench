@@ -8,7 +8,7 @@ from typing import Any
 
 from jupyter_workbench.core.interfaces import EventLogPort, KernelPort, NotebookPort, VisualizationPort
 from jupyter_workbench.core.models import SnapshotResult
-from jupyter_workbench.core.session_service import SessionNotFoundError
+from jupyter_workbench.core.session_service import SessionNotFoundError, SessionService
 
 
 class SnapshotService:
@@ -159,22 +159,7 @@ class SnapshotService:
             return "kernel_degraded"
 
     def _resolve_session_id(self, session_id: str | None) -> str:
-        if session_id is not None:
-            self._current_session_id = session_id
-            return session_id
-        sessions_dir = self.root_dir / "sessions"
-        candidates: list[tuple[float, str]] = []
-        for manifest_path in sessions_dir.glob("*/manifest.json"):
-            try:
-                manifest = json.loads(manifest_path.read_text())
-            except (OSError, json.JSONDecodeError):
-                continue
-            if str(manifest.get("status")) == "closed":
-                continue
-            candidates.append((manifest_path.stat().st_mtime, manifest_path.parent.name))
-        if not candidates:
-            raise SessionNotFoundError("no active sessions found; pass --session-id or run 'jupyter-workbench open'")
-        resolved = max(candidates)[1]
+        resolved = SessionService.resolve_session_id(self.root_dir, session_id)
         self._current_session_id = resolved
         return resolved
 

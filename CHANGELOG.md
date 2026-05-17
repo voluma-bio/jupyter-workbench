@@ -9,6 +9,7 @@ Caveman style. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `bootstrap/setup.md`: add `events.jsonl` to session directory tree (was documented in the body but absent from the tree).
 
 ### Added
+- Read-only `jupyter-workbench watch` live notebook viewer with manifest-following notebook rotation, nbconvert HTML rendering, and polling reload endpoint.
 - Cheap-agent compaction cleanup skill and bootstrap handoff workflow.
 - Detailed lineage inspection with full revision history, active notebook, and derived-state fields.
 - Derived and compacted notebook lineage operations across CLI, MCP, and public DTOs.

@@ -126,6 +126,25 @@ class SessionService:
                 continue
         return SessionList(sessions=sessions)
 
+    @staticmethod
+    def resolve_session_id(root_dir: Path, session_id: str | None = None) -> str:
+        """Resolve an explicit or most-recent active session id."""
+        if session_id is not None:
+            return session_id
+        sessions_dir = root_dir / "sessions"
+        candidates: list[tuple[float, str]] = []
+        for manifest_path in sessions_dir.glob("*/manifest.json"):
+            try:
+                manifest = json.loads(manifest_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            if str(manifest.get("status")) == "closed":
+                continue
+            candidates.append((manifest_path.stat().st_mtime, manifest_path.parent.name))
+        if not candidates:
+            raise SessionNotFoundError("no active sessions found; pass --session-id or run 'jupyter-workbench open'")
+        return max(candidates)[1]
+
     def _create_layout(self, session_dir: Path) -> None:
         (session_dir / "notebooks").mkdir(parents=True, exist_ok=True)
         (session_dir / "outputs").mkdir(parents=True, exist_ok=True)

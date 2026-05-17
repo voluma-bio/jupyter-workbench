@@ -26,6 +26,7 @@ from jupyter_workbench.core.models import (
     SessionList,
     SnapshotResult,
 )
+from jupyter_workbench.core.watch_service import watch_session
 from jupyter_workbench.core.snapshot_service import SnapshotService
 from jupyter_workbench.core.session_service import SessionNotFoundError, SessionService
 
@@ -216,6 +217,47 @@ def snapshot(
     """Report a machine-readable session snapshot."""
     try:
         _print_snapshot(_snapshot_service(root_dir).snapshot(session_id))
+    except SessionNotFoundError as error:
+        _handle_missing_session(error)
+
+
+@app.command("watch")
+def watch(
+    session_id: Annotated[
+        str | None,
+        typer.Option("--session-id", "-s", help="Session id to watch."),
+    ] = None,
+    port: Annotated[
+        int,
+        typer.Option("--port", help="Port to serve the viewer from."),
+    ] = 8765,
+    host: Annotated[
+        str,
+        typer.Option("--host", help="Host interface to bind."),
+    ] = "127.0.0.1",
+    poll_interval: Annotated[
+        float,
+        typer.Option("--poll-interval", help="Watcher debounce interval in seconds."),
+    ] = 0.5,
+    no_open_browser: Annotated[
+        bool,
+        typer.Option("--no-open-browser", help="Do not auto-open the default browser."),
+    ] = False,
+    root_dir: Annotated[
+        Path,
+        typer.Option("--root-dir", help="Durable workbench root directory."),
+    ] = Path(".jupyter-workbench"),
+) -> None:
+    """Serve a read-only live notebook viewer."""
+    try:
+        watch_session(
+            session_id=session_id,
+            root_dir=root_dir,
+            host=host,
+            port=port,
+            poll_interval=poll_interval,
+            open_browser=not no_open_browser,
+        )
     except SessionNotFoundError as error:
         _handle_missing_session(error)
 

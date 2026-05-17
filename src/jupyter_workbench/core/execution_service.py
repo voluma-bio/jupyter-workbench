@@ -8,7 +8,7 @@ from typing import Any
 
 from jupyter_workbench.core.interfaces import ExecutionOutput, KernelPort, NotebookPort, VisualizationPort
 from jupyter_workbench.core.models import ExecResult, NotebookMutationResult
-from jupyter_workbench.core.session_service import SessionNotFoundError
+from jupyter_workbench.core.session_service import SessionNotFoundError, SessionService
 from jupyter_workbench.core.session_lock import SessionLock
 
 INLINE_LIMIT_BYTES = 64 * 1024
@@ -200,21 +200,7 @@ class ExecutionService:
         return str(path)
 
     def _resolve_session_id(self, session_id: str | None) -> str:
-        if session_id is not None:
-            return session_id
-        sessions_dir = self.root_dir / "sessions"
-        candidates: list[tuple[float, str]] = []
-        for manifest_path in sessions_dir.glob("*/manifest.json"):
-            try:
-                manifest = json.loads(manifest_path.read_text())
-            except (OSError, json.JSONDecodeError):
-                continue
-            if str(manifest.get("status")) == "closed":
-                continue
-            candidates.append((manifest_path.stat().st_mtime, manifest_path.parent.name))
-        if not candidates:
-            raise SessionNotFoundError("no active sessions found; pass --session-id or run 'jupyter-workbench open'")
-        return max(candidates)[1]
+        return SessionService.resolve_session_id(self.root_dir, session_id)
 
     def _read_manifest(self, session_id: str) -> dict[str, Any]:
         manifest_path = self.root_dir / "sessions" / session_id / "manifest.json"
