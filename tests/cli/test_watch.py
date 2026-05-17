@@ -7,6 +7,7 @@ import os
 import socket
 import time
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import urlopen
 
 import nbformat
@@ -18,7 +19,7 @@ from jupyter_workbench.cli import app
 from jupyter_workbench.core import watch_service
 from jupyter_workbench.core.lineage_service import LineageService
 from jupyter_workbench.core.session_lock import SessionLock
-from jupyter_workbench.core.session_service import SessionService
+from jupyter_workbench.core.session_service import SessionNotFoundError, SessionService
 from jupyter_workbench.core.watch_service import LiveNotebookViewer, watch_session
 
 
@@ -329,6 +330,78 @@ def test_live_viewer_html_contains_seeded_etag(tmp_path: Path) -> None:
         assert all(c in "0123456789abcdef" for c in etag)
     finally:
         viewer.stop()
+
+
+def test_live_viewer_rejects_path_traversal(tmp_path: Path) -> None:
+    root_dir = tmp_path / "wb"
+    session_id = "sesstraversal"
+    _bootstrap_session(
+        root_dir=root_dir,
+        session_id=session_id,
+        notebook_name="active.ipynb",
+        cells=[nbformat.v4.new_markdown_cell("traversal test cell")],
+    )
+
+    viewer = LiveNotebookViewer(
+        session_id=session_id,
+        root_dir=root_dir,
+        host="127.0.0.1",
+        port=0,
+        poll_interval=0.05,
+        open_browser=False,
+    )
+    url = viewer.start()
+    try:
+        # Verify normal content serves fine
+        assert "traversal test cell" in _get_text(url)
+
+        # Path traversal attempts must return 404
+        for malicious_path in ["/../etc/passwd", "/../../../etc/hosts", "/..%2f..%2fetc/passwd"]:
+            with pytest.raises(HTTPError) as exc_info:
+                _get_text(f"{url.rstrip('/')}{malicious_path}")
+            assert exc_info.value.code == 404
+    finally:
+        viewer.stop()
+
+
+def test_live_viewer_stop_is_idempotent(tmp_path: Path) -> None:
+    root_dir = tmp_path / "wb"
+    session_id = "sessidem"
+    _bootstrap_session(
+        root_dir=root_dir,
+        session_id=session_id,
+        notebook_name="active.ipynb",
+        cells=[nbformat.v4.new_markdown_cell("idempotent stop cell")],
+    )
+
+    viewer = LiveNotebookViewer(
+        session_id=session_id,
+        root_dir=root_dir,
+        host="127.0.0.1",
+        port=0,
+        poll_interval=0.05,
+        open_browser=False,
+    )
+    viewer.start()
+    viewer.stop()
+    # Second stop must not raise
+    viewer.stop()
+
+
+def test_watch_session_raises_for_nonexistent_session(tmp_path: Path) -> None:
+    root_dir = tmp_path / "wb"
+    root_dir.mkdir(parents=True)
+    (root_dir / "sessions").mkdir()
+
+    with pytest.raises(SessionNotFoundError, match="no active sessions found"):
+        watch_session(
+            session_id=None,
+            root_dir=root_dir,
+            host="127.0.0.1",
+            port=0,
+            poll_interval=0.1,
+            open_browser=False,
+        )
 
 
 def test_resolve_session_id_prefers_newest_non_closed_manifest(tmp_path: Path) -> None:
