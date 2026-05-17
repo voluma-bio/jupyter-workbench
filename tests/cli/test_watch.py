@@ -298,6 +298,39 @@ def test_watch_session_stops_viewer_when_start_raises(monkeypatch, tmp_path: Pat
     assert _FakeViewer.stop_calls == 1
 
 
+def test_live_viewer_html_contains_seeded_etag(tmp_path: Path) -> None:
+    root_dir = tmp_path / "wb"
+    session_id = "sessetag1"
+    _bootstrap_session(
+        root_dir=root_dir,
+        session_id=session_id,
+        notebook_name="active.ipynb",
+        cells=[nbformat.v4.new_markdown_cell("etag seed cell")],
+    )
+
+    viewer = LiveNotebookViewer(
+        session_id=session_id,
+        root_dir=root_dir,
+        host="127.0.0.1",
+        port=0,
+        poll_interval=0.05,
+        open_browser=False,
+    )
+    url = viewer.start()
+    try:
+        html = _get_text(url)
+        etag = _get_text(f"{url}etag")
+        # The served HTML must contain the etag as the seeded initial value
+        assert json.dumps(etag) in html
+        # Etag is content-based: same content yields same etag
+        assert etag == _get_text(f"{url}etag")
+        # Etag looks like a hex hash prefix, not a timestamp
+        assert len(etag) == 16
+        assert all(c in "0123456789abcdef" for c in etag)
+    finally:
+        viewer.stop()
+
+
 def test_resolve_session_id_prefers_newest_non_closed_manifest(tmp_path: Path) -> None:
     root_dir = tmp_path / "wb"
     _bootstrap_session(

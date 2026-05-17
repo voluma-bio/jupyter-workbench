@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import mimetypes
 import os
 import shutil
 import tempfile
 import threading
-import time
 import webbrowser
 from dataclasses import dataclass
 from errno import EADDRINUSE
@@ -235,12 +235,14 @@ class LiveNotebookViewer:
             print(f"watch refresh failed: {error}")
 
     def _publish_render_bundle(self, html: str, resources: dict[str, Any]) -> None:
+        etag = _content_hash(html, resources)
+        final_html = _inject_reloader(html, etag)
         staged_dir = Path(tempfile.mkdtemp(prefix="render-", dir=self._render_root))
-        _write_render_bundle(staged_dir, html, resources)
+        _write_render_bundle(staged_dir, final_html, resources)
         with self._render_state_lock:
             previous_dir = self._active_render_dir
             self._active_render_dir = staged_dir
-            self._current_etag = f"{time.time_ns()}"
+            self._current_etag = etag
         if previous_dir is not None:
             shutil.rmtree(previous_dir, ignore_errors=True)
 
@@ -311,33 +313,44 @@ def _render_html(notebook_bytes: bytes) -> tuple[str, dict[str, Any]]:
     for template_name in ("lab", "classic"):
         try:
             body, resources = HTMLExporter(template_name=template_name).from_notebook_node(notebook)
-            return _inject_reloader(body), resources
+            return body, resources
         except Exception:
             continue
     raise RuntimeError("failed to render notebook with nbconvert templates: lab, classic")
 
 
-def _inject_reloader(html: str) -> str:
-    script = """
+def _content_hash(html: str, resources: dict[str, Any]) -> str:
+    """Compute a content-based etag from rendered HTML and resources."""
+    hasher = hashlib.sha256()
+    hasher.update(html.encode("utf-8"))
+    for name in sorted(resources.get("outputs", {}).keys()):
+        payload = resources["outputs"][name]
+        data = payload if isinstance(payload, bytes) else str(payload).encode("utf-8")
+        hasher.update(name.encode("utf-8"))
+        hasher.update(data)
+    return hasher.hexdigest()[:16]
+
+
+def _inject_reloader(html: str, etag: str) -> str:
+    etag_json = json.dumps(etag)
+    script = f"""
 <script>
-(() => {
-  let current = null;
-  const poll = async () => {
-    try {
-      const value = (await fetch('/etag', { cache: 'no-store' })).text();
+(() => {{
+  let current = {etag_json};
+  const poll = async () => {{
+    try {{
+      const value = (await fetch('/etag', {{ cache: 'no-store' }})).text();
       const etag = await value;
-      if (current === null) {
-        current = etag;
-      } else if (etag !== current) {
+      if (etag !== current) {{
         window.location.reload();
-      }
-    } catch (_err) {
+      }}
+    }} catch (_err) {{
       // ignore transient polling errors
-    }
-  };
+    }}
+  }};
   setInterval(poll, 500);
   poll();
-})();
+}})();
 </script>
 """
     marker = "</body>"
