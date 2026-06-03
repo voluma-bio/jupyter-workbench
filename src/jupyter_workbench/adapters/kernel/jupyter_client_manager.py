@@ -42,7 +42,7 @@ class JupyterClientManager:
         client = cast(BlockingKernelClient, manager.blocking_client())
         client.start_channels()
         try:
-            client.wait_for_ready(timeout=self.timeout_seconds)
+            client.wait_for_ready(timeout=60.0)
         except Exception:
             self.shutdown(session_id)
             raise
@@ -125,7 +125,7 @@ class JupyterClientManager:
         try:
             client.load_connection_file(str(connection_file))
             client.start_channels(iopub=False, stdin=False, control=False)
-            client.wait_for_ready(timeout=min(self.timeout_seconds, 2.0))
+            client.wait_for_ready(timeout=2.0)
             return bool(client.is_alive())
         except Exception:
             return False

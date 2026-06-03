@@ -26,6 +26,7 @@ from jupyter_workbench.core.models import (
     SessionList,
     SnapshotResult,
 )
+from jupyter_workbench.core.watch_service import watch_session
 from jupyter_workbench.core.snapshot_service import SnapshotService
 from jupyter_workbench.core.session_service import SessionNotFoundError, SessionService
 
@@ -33,8 +34,8 @@ app = typer.Typer(help="Persistent Jupyter workbench sessions.")
 console = Console()
 
 
-def _adapters(root_dir: Path) -> tuple[JupyterClientManager, NbformatStore]:
-    return JupyterClientManager(root_dir=root_dir), NbformatStore()
+def _adapters(root_dir: Path, timeout_seconds: float = 60.0) -> tuple[JupyterClientManager, NbformatStore]:
+    return JupyterClientManager(root_dir=root_dir, timeout_seconds=timeout_seconds), NbformatStore()
 
 
 def _service(root_dir: Path) -> SessionService:
@@ -42,8 +43,8 @@ def _service(root_dir: Path) -> SessionService:
     return SessionService(kernel=kernel, notebook=notebook, root_dir=root_dir)
 
 
-def _execution_service(root_dir: Path) -> ExecutionService:
-    kernel, notebook = _adapters(root_dir)
+def _execution_service(root_dir: Path, timeout_seconds: float = 60.0) -> ExecutionService:
+    kernel, notebook = _adapters(root_dir, timeout_seconds=timeout_seconds)
     return ExecutionService(
         kernel=kernel,
         notebook=notebook,
@@ -63,8 +64,8 @@ def _snapshot_service(root_dir: Path) -> SnapshotService:
     )
 
 
-def _lineage_service(root_dir: Path) -> LineageService:
-    kernel, notebook = _adapters(root_dir)
+def _lineage_service(root_dir: Path, timeout_seconds: float = 60.0) -> LineageService:
+    kernel, notebook = _adapters(root_dir, timeout_seconds=timeout_seconds)
     return LineageService(kernel=kernel, notebook=notebook, root_dir=root_dir)
 
 
@@ -171,6 +172,10 @@ def exec_code(
         Path | None,
         typer.Option("--file", help="Python file to execute as one notebook cell."),
     ] = None,
+    timeout: Annotated[
+        float,
+        typer.Option("--timeout", help="Maximum seconds to wait for code execution."),
+    ] = 60.0,
     root_dir: Annotated[
         Path,
         typer.Option("--root-dir", help="Durable workbench root directory."),
@@ -178,7 +183,7 @@ def exec_code(
 ) -> None:
     """Execute code in a workbench session."""
     try:
-        _print_exec(_execution_service(root_dir).exec_code(code, session_id=session_id, file=file))
+        _print_exec(_execution_service(root_dir, timeout_seconds=timeout).exec_code(code, session_id=session_id, file=file))
     except SessionNotFoundError as error:
         _handle_missing_session(error)
 
@@ -216,6 +221,47 @@ def snapshot(
     """Report a machine-readable session snapshot."""
     try:
         _print_snapshot(_snapshot_service(root_dir).snapshot(session_id))
+    except SessionNotFoundError as error:
+        _handle_missing_session(error)
+
+
+@app.command("watch")
+def watch(
+    session_id: Annotated[
+        str | None,
+        typer.Option("--session-id", "-s", help="Session id to watch."),
+    ] = None,
+    port: Annotated[
+        int,
+        typer.Option("--port", help="Port to serve the viewer from."),
+    ] = 8765,
+    host: Annotated[
+        str,
+        typer.Option("--host", help="Host interface to bind."),
+    ] = "127.0.0.1",
+    poll_interval: Annotated[
+        float,
+        typer.Option("--poll-interval", help="Watcher debounce interval in seconds."),
+    ] = 0.5,
+    no_open_browser: Annotated[
+        bool,
+        typer.Option("--no-open-browser", help="Do not auto-open the default browser."),
+    ] = False,
+    root_dir: Annotated[
+        Path,
+        typer.Option("--root-dir", help="Durable workbench root directory."),
+    ] = Path(".jupyter-workbench"),
+) -> None:
+    """Serve a read-only live notebook viewer."""
+    try:
+        watch_session(
+            session_id=session_id,
+            root_dir=root_dir,
+            host=host,
+            port=port,
+            poll_interval=poll_interval,
+            open_browser=not no_open_browser,
+        )
     except SessionNotFoundError as error:
         _handle_missing_session(error)
 
@@ -264,6 +310,10 @@ def close(
 @app.command("replay")
 def replay(
     session_id: Annotated[str, typer.Argument(help="Session id to replay.")],
+    timeout: Annotated[
+        float,
+        typer.Option("--timeout", help="Maximum seconds to wait per code cell during replay."),
+    ] = 60.0,
     root_dir: Annotated[
         Path,
         typer.Option("--root-dir", help="Durable workbench root directory."),
@@ -271,7 +321,7 @@ def replay(
 ) -> None:
     """Replay notebook lineage into a fresh runtime."""
     try:
-        _print_replay(_lineage_service(root_dir).replay(session_id))
+        _print_replay(_lineage_service(root_dir, timeout_seconds=timeout).replay(session_id))
     except SessionNotFoundError as error:
         _handle_missing_session(error)
 
